@@ -24,6 +24,24 @@
       新建会话
     </button>
 
+    <button
+      class="anki-entry"
+      type="button"
+      @click="$emit('open-anki')"
+    >
+      <span class="anki-entry-icon">✦</span>
+      新增卡片
+    </button>
+
+    <button
+      class="anki-entry"
+      type="button"
+      @click="$emit('open-anki-manager')"
+    >
+      <span class="anki-entry-icon">▱</span>
+      卡片管理
+    </button>
+
     <!-- 最近会话 -->
     <div class="section-title">
       最近会话
@@ -110,6 +128,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'new-chat': []
+  'open-anki': []
+  'open-anki-manager': []
   'select-session': [sessionId: string]
   rename: [sessionId: string, title: string]
   delete: [sessionId: string]
@@ -260,6 +280,48 @@ function deleteSession(sessionId: string) {
 
 .new-chat:hover {
   background: #eeeeee;
+}
+
+.anki-entry {
+  width: 100%;
+  height: 40px;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-top: 8px;
+  padding: 0 12px;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: transparent;
+  color: #5f5b56;
+
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.anki-entry:hover {
+  background: #ecebe9;
+  color: #222222;
+}
+
+.anki-entry-icon {
+  width: 22px;
+  height: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 6px;
+
+  background: #e4ddd4;
+  color: #715e4b;
+  font-size: 12px;
 }
 
 .plus {

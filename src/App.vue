@@ -8,6 +8,10 @@
 
       @new-chat="openNewSession"
 
+      @open-anki="openAnkiGenerator"
+
+      @open-anki-manager="openAnkiManager"
+
       @select-session="selectSession"
 
       @rename="renameSession"
@@ -15,9 +19,20 @@
       @delete="deleteSession"
     />
 
+    <AnkiGenerator
+      v-if="showAnkiGenerator"
+      :editing-card="editingCard"
+      @close="openAnkiManager"
+    />
+
+    <AnkiManager
+      v-else-if="showAnkiManager"
+      @edit-card="openCardEditor"
+    />
+
     <!-- 新会话预备页面 -->
     <NewSession
-      v-if="showNewSession"
+      v-else-if="showNewSession"
       @start="startNewSession"
     />
 
@@ -118,6 +133,8 @@ import { computed, nextTick, ref } from 'vue'
 
 import ChatSidebar from './components/chat/ChatSidebar.vue'
 import ChatMessage from './components/chat/ChatMessage.vue'
+import AnkiGenerator from './pages/AnkiGenerator.vue'
+import AnkiManager from './pages/AnkiManager.vue'
 import NewSession from './pages/NewSession.vue'
 
 import type {
@@ -125,6 +142,7 @@ import type {
   ChatMessage as ChatMessageType,
   ChatSession
 } from './types/chat'
+import type { Card } from './types/anki'
 
 import { sendMessage } from './services/api'
 
@@ -134,6 +152,12 @@ import { sendMessage } from './services/api'
 ========================= */
 
 const showNewSession = ref(false)
+
+const showAnkiGenerator = ref(false)
+
+const showAnkiManager = ref(false)
+
+const editingCard = ref<Card | null>(null)
 
 const currentAgent = ref<AgentType>('math')
 
@@ -193,7 +217,31 @@ const currentAgentInfo = computed(() => {
 ========================= */
 
 function openNewSession() {
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  editingCard.value = null
   showNewSession.value = true
+}
+
+function openAnkiGenerator() {
+  showNewSession.value = false
+  showAnkiManager.value = false
+  editingCard.value = null
+  showAnkiGenerator.value = true
+}
+
+function openAnkiManager() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  editingCard.value = null
+  showAnkiManager.value = true
+}
+
+function openCardEditor(card: Card) {
+  showNewSession.value = false
+  showAnkiManager.value = false
+  editingCard.value = card
+  showAnkiGenerator.value = true
 }
 
 
@@ -229,6 +277,9 @@ async function startNewSession(
   currentAgent.value = agent
 
   showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  editingCard.value = null
 
   /*
    * 把用户第一次的问题
@@ -375,6 +426,9 @@ function selectSession(
   currentAgent.value = session.agent
 
   showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  editingCard.value = null
 }
 
 
