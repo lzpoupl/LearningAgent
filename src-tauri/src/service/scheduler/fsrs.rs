@@ -41,9 +41,7 @@ pub struct FsrsParameters {
     /// Hard 等级的稳定性惩罚系数。
     pub hard_penalty: f64,
     /// Easy 等级的稳定性奖励系数。
-    pub easy_bonus: f64,
-    /// 短期稳定性系数（用于同日调度，按天粒度时保留但暂未使用）。
-    pub short_term_stability: f64,
+    pub easy_bonus: f64
 }
 
 impl Default for FsrsParameters {
@@ -61,8 +59,7 @@ impl Default for FsrsParameters {
             forget_stability_exp: 0.3246,
             forget_retrievability: 1.587,
             hard_penalty: 0.2272,
-            easy_bonus: 2.8755,
-            short_term_stability: 0.5029,
+            easy_bonus: 2.8755
         }
     }
 }
