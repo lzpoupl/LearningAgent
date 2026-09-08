@@ -1,10 +1,19 @@
 use crate::interface::anki::*;
+use crate::service::anki::AnkiService;
+use crate::AppState;
 
 fn not_implemented<T>() -> Result<T, AnkiError> {
     Err(AnkiError {
         code: "internal".into(),
         message: "not implemented".into(),
     })
+}
+
+fn db_lock_error() -> AnkiError {
+    AnkiError {
+        code: "internal".into(),
+        message: "数据库连接不可用".into(),
+    }
 }
 
 #[tauri::command]
@@ -56,15 +65,22 @@ pub fn anki_move_card(card_id: String, target_deck_path: String) -> Result<Card,
 }
 
 #[tauri::command]
-pub fn anki_grade_card(card_id: String, grade: CardGrade) -> Result<ReviewOutcome, AnkiError> {
-    let _ = (card_id, grade);
-    not_implemented()
+pub fn anki_grade_card(
+    state: tauri::State<'_, AppState>,
+    card_id: String,
+    grade: CardGrade,
+) -> Result<ReviewOutcome, AnkiError> {
+    let conn = state.db.lock().map_err(|_| db_lock_error())?;
+    AnkiService::new(&conn).grade_card(&card_id, grade)
 }
 
 #[tauri::command]
-pub fn anki_reset_card(card_id: String) -> Result<ReviewOutcome, AnkiError> {
-    let _ = card_id;
-    not_implemented()
+pub fn anki_reset_card(
+    state: tauri::State<'_, AppState>,
+    card_id: String,
+) -> Result<ReviewOutcome, AnkiError> {
+    let conn = state.db.lock().map_err(|_| db_lock_error())?;
+    AnkiService::new(&conn).reset_card(&card_id)
 }
 
 #[tauri::command]

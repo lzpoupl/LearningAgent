@@ -39,6 +39,13 @@ pub const MIGRATIONS: &[Migration] = &[Migration {
         CREATE INDEX IF NOT EXISTS idx_card_state ON card (state);
         CREATE INDEX IF NOT EXISTS idx_card_due ON card (due_at);
     "#,
+}, Migration {
+    version: 2,
+    name: "card_scheduling",
+    sql: r#"
+        ALTER TABLE card ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'sm2';
+        ALTER TABLE card ADD COLUMN scheduler_state TEXT;
+    "#,
 }];
 
 pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Connection> {
