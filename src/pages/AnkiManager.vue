@@ -29,35 +29,19 @@
           <button class="text-button" type="button" @click="showCreateDeck = true">创建牌组 →</button>
         </div>
         <div v-else class="deck-tree" role="tree">
-          <button
-            class="deck-row all-cards-row"
-            :class="{ active: selectedDeckPath === '' }"
-            type="button"
-            role="treeitem"
-            @click="selectDeck('')"
-          >
+          <button class="deck-row all-cards-row" :class="{ active: selectedDeckPath === '' }" type="button"
+            role="treeitem" @click="selectDeck('')">
             <span class="tree-toggle invisible" aria-hidden="true">›</span>
             <span class="deck-icon" aria-hidden="true">▦</span>
             <span class="deck-name">全部卡片</span>
             <span class="deck-card-count">{{ totalCardCount }}</span>
           </button>
-          <button
-            v-for="row in deckRows"
-            :key="row.deck.path"
-            class="deck-row"
-            :class="{ active: selectedDeckPath === row.deck.path }"
-            :style="{ paddingLeft: `${14 + row.depth * 18}px` }"
-            type="button"
-            role="treeitem"
-            :aria-expanded="row.hasChildren ? row.expanded : undefined"
-            @click="selectDeck(row.deck.path)"
-          >
-            <span
-              class="tree-toggle"
-              :class="{ invisible: !row.hasChildren }"
-              aria-hidden="true"
-              @click.stop="toggleDeck(row.deck.path)"
-            >{{ row.expanded ? '⌄' : '›' }}</span>
+          <button v-for="row in deckRows" :key="row.deck.path" class="deck-row"
+            :class="{ active: selectedDeckPath === row.deck.path }" :style="{ paddingLeft: `${14 + row.depth * 18}px` }"
+            type="button" role="treeitem" :aria-expanded="row.hasChildren ? row.expanded : undefined"
+            @click="selectDeck(row.deck.path)">
+            <span class="tree-toggle" :class="{ invisible: !row.hasChildren }" aria-hidden="true"
+              @click.stop="toggleDeck(row.deck.path)">{{ row.expanded ? '⌄' : '›' }}</span>
             <span class="deck-icon" aria-hidden="true">▱</span>
             <span class="deck-name">{{ row.deck.name || row.deck.path }}</span>
             <span class="deck-card-count">{{ row.deck.cardCount }}</span>
@@ -90,7 +74,8 @@
             <option value="review">复习中</option>
             <option value="relearning">重新学习</option>
           </select>
-          <button class="outline-button filter-button" type="button" :disabled="loadingCards" @click="loadCards">查询</button>
+          <button class="outline-button filter-button" type="button" :disabled="loadingCards"
+            @click="loadCards">查询</button>
         </div>
 
         <div v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</div>
@@ -102,14 +87,8 @@
           <span>{{ keyword ? '试试换一个搜索词。' : '这个牌组还没有卡片。' }}</span>
         </div>
         <div v-else class="card-list">
-          <article
-            v-for="card in cards"
-            :key="card.id"
-            class="card-item"
-            tabindex="0"
-            @click="openPreview(card)"
-            @keydown.enter="openPreview(card)"
-          >
+          <article v-for="card in cards" :key="card.id" class="card-item" tabindex="0" @click="openPreview(card)"
+            @keydown.enter="openPreview(card)">
             <div class="card-content">
               <div class="card-side">
                 <span class="side-label">正面</span>
@@ -185,7 +164,8 @@
         <p class="modal-hint">使用 / 创建层级牌组，例如“英语 / 例句”。</p>
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="showCreateDeck = false">取消</button>
-          <button class="dark-button" type="submit" :disabled="!newDeckPath.trim() || actionLoading">{{ actionLoading ? '创建中...' : '创建牌组' }}</button>
+          <button class="dark-button" type="submit" :disabled="!newDeckPath.trim() || actionLoading">{{ actionLoading ?
+            '创建中...' : '创建牌组' }}</button>
         </div>
       </form>
     </div>
@@ -205,7 +185,9 @@
         <textarea id="edit-back" v-model="editBack" rows="7" />
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="editingCard = null">取消</button>
-          <button class="dark-button" type="submit" :disabled="!editFront.trim() || !editBack.trim() || actionLoading">{{ actionLoading ? '保存中...' : '保存修改' }}</button>
+          <button class="dark-button" type="submit"
+            :disabled="!editFront.trim() || !editBack.trim() || actionLoading">{{ actionLoading ? '保存中...' : '保存修改'
+            }}</button>
         </div>
       </form>
     </div>
@@ -226,7 +208,8 @@
         </select>
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="movingCard = null">取消</button>
-          <button class="dark-button" type="submit" :disabled="!moveTargetPath || actionLoading">{{ actionLoading ? '移动中...' : '确认移动' }}</button>
+          <button class="dark-button" type="submit" :disabled="!moveTargetPath || actionLoading">{{ actionLoading ?
+            '移动中...' : '确认移动' }}</button>
         </div>
       </form>
     </div>
@@ -245,7 +228,8 @@
         <p class="modal-hint">当前牌组：{{ selectedDeckPath }}</p>
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="showMoveDeck = false">取消</button>
-          <button class="dark-button" type="submit" :disabled="!moveDeckTargetPath.trim() || actionLoading">{{ actionLoading ? '移动中...' : '确认移动' }}</button>
+          <button class="dark-button" type="submit" :disabled="!moveDeckTargetPath.trim() || actionLoading">{{
+            actionLoading ? '移动中...' : '确认移动' }}</button>
         </div>
       </form>
     </div>
@@ -478,11 +462,11 @@ async function createDeckItem() {
   errorMessage.value = ''
 
   try {
-    const deck = await createDeck(path)
+    await createDeck(path)
     showCreateDeck.value = false
     newDeckPath.value = ''
-    selectedDeckPath.value = deck.path
-    successMessage.value = `牌组“${deck.path}”已创建。`
+    selectedDeckPath.value = path
+    successMessage.value = `牌组“${path}”已创建。`
     await reloadDecks()
   } catch (error) {
     console.error(error)
@@ -531,8 +515,9 @@ async function moveSelectedDeck() {
 
   actionLoading.value = true
   try {
-    const movedDeck = await moveDeck(selectedDeckPath.value, moveDeckTargetPath.value.trim())
-    selectedDeckPath.value = movedDeck.path
+    let targetPath = moveDeckTargetPath.value.trim()
+    await moveDeck(selectedDeckPath.value, targetPath)
+    selectedDeckPath.value = targetPath
     moveDeckTargetPath.value = ''
     showMoveDeck.value = false
     successMessage.value = '牌组已移动。'
