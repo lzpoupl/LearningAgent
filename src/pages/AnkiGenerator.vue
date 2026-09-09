@@ -27,20 +27,24 @@
 
         <label class="field-label" for="deck">目标牌组</label>
         <div class="deck-row">
-          <select id="deck" v-model="selectedDeckPath" :disabled="isEditing || loadingDecks || saving || decks.length === 0">
+          <select id="deck" v-model="selectedDeckPath"
+            :disabled="isEditing || loadingDecks || saving || decks.length === 0">
             <option value="" disabled>{{ loadingDecks ? '正在加载牌组...' : '选择一个牌组' }}</option>
             <option v-for="deck in decks" :key="deck.path" :value="deck.path">
               {{ deck.path }} · {{ deck.cardCount }} 张
             </option>
           </select>
-          <button class="icon-button" type="button" title="新建牌组" :disabled="saving || creatingDeck" @click="showCreateDeck = !showCreateDeck">
+          <button class="icon-button" type="button" title="新建牌组" :disabled="saving || creatingDeck"
+            @click="showCreateDeck = !showCreateDeck">
             ＋
           </button>
         </div>
 
         <div v-if="showCreateDeck" class="create-deck-row">
-          <input v-model="newDeckPath" type="text" placeholder="例如：数学 / 错题" :disabled="creatingDeck" @keydown.enter.prevent="createNewDeck" />
-          <button class="secondary-button" type="button" :disabled="!newDeckPath.trim() || creatingDeck" @click="createNewDeck">
+          <input v-model="newDeckPath" type="text" placeholder="例如：数学 / 错题" :disabled="creatingDeck"
+            @keydown.enter.prevent="createNewDeck" />
+          <button class="secondary-button" type="button" :disabled="!newDeckPath.trim() || creatingDeck"
+            @click="createNewDeck">
             {{ creatingDeck ? '创建中' : '创建' }}
           </button>
         </div>
@@ -48,12 +52,14 @@
         <div class="field-group">
           <div class="field-header">
             <label class="field-label" for="front">正面 · 先回忆，再翻面</label>
-            <button class="image-button" type="button" :disabled="saving" title="插入图片" @click="openImagePicker('front')">
+            <button class="image-button" type="button" :disabled="saving" title="插入图片"
+              @click="openImagePicker('front')">
               ▧ 插入图片
             </button>
           </div>
           <textarea ref="frontTextarea" id="front" v-model="front" rows="6" placeholder="写一个能独立理解的问题，不要提前泄露答案。" />
-          <input ref="frontImageInput" class="hidden-file-input" type="file" accept="image/*" @change="handleImageSelected('front', $event)" />
+          <input ref="frontImageInput" class="hidden-file-input" type="file" accept="image/*"
+            @change="handleImageSelected('front', $event)" />
           <span class="field-hint">{{ front.length }} / 500</span>
         </div>
 
@@ -65,7 +71,8 @@
             </button>
           </div>
           <textarea ref="backTextarea" id="back" v-model="back" rows="8" placeholder="先写标准答案，再补充必要的解释、条件或例子。" />
-          <input ref="backImageInput" class="hidden-file-input" type="file" accept="image/*" @change="handleImageSelected('back', $event)" />
+          <input ref="backImageInput" class="hidden-file-input" type="file" accept="image/*"
+            @change="handleImageSelected('back', $event)" />
           <span class="field-hint">{{ back.length }} / 1200</span>
         </div>
 
@@ -141,7 +148,6 @@ const backTextarea = ref<HTMLTextAreaElement | null>(null)
 const frontImageInput = ref<HTMLInputElement | null>(null)
 const backImageInput = ref<HTMLInputElement | null>(null)
 
-const defaultDeckPath = '测试'
 
 const isEditing = computed(() => Boolean(props.editingCard))
 const canSave = computed(() => Boolean(selectedDeckPath.value && front.value.trim() && back.value.trim()))
@@ -252,14 +258,8 @@ async function loadDecks() {
       if (!selectedDeckPath.value) {
         selectedDeckPath.value = loadedDecks[0].path
       }
-
-      return
     }
 
-    const defaultDeck = await createDeck(defaultDeckPath)
-    decks.value = [defaultDeck]
-    selectedDeckPath.value = defaultDeck.path
-    successMessage.value = `默认牌组“${defaultDeck.path}”已创建并存入 Anki 数据库。`
   } catch (error) {
     console.error(error)
     errorMessage.value = '牌组加载或默认牌组创建失败，请确认 Anki 服务已连接。'
@@ -279,12 +279,11 @@ async function createNewDeck() {
   errorMessage.value = ''
 
   try {
-    const deck = await createDeck(path)
-    decks.value = [...decks.value.filter(item => item.path !== deck.path), deck]
-    selectedDeckPath.value = deck.path
+    await createDeck(path)
+    selectedDeckPath.value = path
     newDeckPath.value = ''
     showCreateDeck.value = false
-    successMessage.value = `牌组“${deck.path}”已创建并存入 Anki 数据库。`
+    successMessage.value = `牌组“${path}”已创建并存入 Anki 数据库。`
   } catch (error) {
     console.error(error)
     errorMessage.value = '牌组创建失败，请检查牌组路径后重试。'

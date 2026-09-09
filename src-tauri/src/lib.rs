@@ -21,9 +21,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
-            std::fs::create_dir_all(&data_dir)?;
-            let conn = repository::db::open(data_dir.join("learningagent.db"))?;
+            // Vite 的开发模式对应 Tauri 的 debug 构建；前端使用 mock 时，后端
+            // 也使用进程级内存数据库，确保测试数据不会污染正式数据。
+            #[cfg(debug_assertions)]
+            let conn = repository::db::open_in_memory()?;
+
+            #[cfg(not(debug_assertions))]
+            let conn = {
+                let data_dir = app.path().app_data_dir()?;
+                std::fs::create_dir_all(&data_dir)?;
+                repository::db::open(data_dir.join("learningagent.db"))?
+            };
+
             let anki = AnkiService::new(
                 Arc::new(Mutex::new(conn)),
                 Arc::new(SchedulerRegistry::new()),
