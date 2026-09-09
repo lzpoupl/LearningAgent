@@ -220,3 +220,69 @@ impl SchedulingAlgorithm for Fsrs {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use crate::service::scheduler::SchedulingAlgorithm;
+
+    #[test]
+    fn print_fsrs_first_review_results() {
+        let algorithm = Fsrs::default();
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
+
+        for grade in [CardGrade::Again, CardGrade::Hard, CardGrade::Good, CardGrade::Easy] {
+            let result = algorithm
+                .review(
+                    CardMemory {
+                        state: CardState::New,
+                        algorithm_state: None,
+                    },
+                    grade,
+                    now,
+                )
+                .unwrap();
+            println!(
+                "FSRS first grade={grade:?} state={:?} due_at={} algorithm_state={}",
+                result.state,
+                result.due_at.to_rfc3339(),
+                serde_json::to_string_pretty(&result.algorithm_state).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn print_fsrs_review_sequence() {
+        let algorithm = Fsrs::default();
+        let first_at = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
+        let second_at = Utc.with_ymd_and_hms(2026, 1, 8, 12, 0, 0).unwrap();
+        let mut state = None;
+        let mut card_state = CardState::New;
+
+        for (grade, now) in [
+            (CardGrade::Good, first_at),
+            (CardGrade::Easy, second_at),
+            (CardGrade::Again, second_at),
+        ] {
+            let result = algorithm
+                .review(
+                    CardMemory {
+                        state: card_state,
+                        algorithm_state: state,
+                    },
+                    grade,
+                    now,
+                )
+                .unwrap();
+            println!(
+                "FSRS sequence grade={grade:?} state={:?} due_at={} algorithm_state={}",
+                result.state,
+                result.due_at.to_rfc3339(),
+                serde_json::to_string_pretty(&result.algorithm_state).unwrap()
+            );
+            card_state = result.state;
+            state = Some(result.algorithm_state);
+        }
+    }
+}
