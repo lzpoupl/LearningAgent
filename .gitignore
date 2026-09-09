@@ -26,3 +26,12 @@ dist-ssr
 # ai configuration
 .kilo/
 plan/
+.agents/
+skills-lock.json
+
+# auto generated import typescript files
+auto-imports.d.ts
+components.d.ts
+
+# references
+reference/

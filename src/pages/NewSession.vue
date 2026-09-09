@@ -99,6 +99,10 @@
 import { computed, ref } from 'vue'
 import type { AgentType } from '../types/chat'
 
+const props = defineProps<{
+  initialAgent?: AgentType
+}>()
+
 const emit = defineEmits<{
   start: [
     agent: AgentType,
@@ -106,7 +110,7 @@ const emit = defineEmits<{
   ]
 }>()
 
-const selectedAgent = ref<AgentType>('math')
+const selectedAgent = ref<AgentType>(props.initialAgent ?? 'math')
 const agentMenuOpen = ref(false)
 
 const question = ref('')
