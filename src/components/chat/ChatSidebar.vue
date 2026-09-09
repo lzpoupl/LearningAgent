@@ -1,53 +1,110 @@
 <template>
-  <aside
-    class="sidebar"
-    :style="{ width: sidebarWidth ? `${sidebarWidth}px` : undefined }"
-  >
+  <aside class="sidebar-shell">
+    <nav class="app-nav" aria-label="主导航">
+      <div class="nav-brand">L</div>
 
-    <!-- Logo -->
-    <div class="logo">
-      <div class="logo-icon">
-        L
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'home' }"
+        type="button"
+        title="首页"
+        @click="$emit('open-home')"
+      >
+        <span class="nav-icon">⌂</span>
+        <span>首页</span>
+      </button>
+
+      <button class="nav-item nav-item-disabled" type="button" disabled title="Agent管理">
+        <span class="nav-icon">♙</span>
+        <span>Agent管理</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'chat' }"
+        type="button"
+        title="对话"
+        @click="$emit('open-chat')"
+      >
+        <span class="nav-icon">◌</span>
+        <span>对话</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'anki' }"
+        type="button"
+        title="Anki 管理"
+        @click="$emit('open-anki-manager')"
+      >
+        <span class="nav-icon">▤</span>
+        <span>Anki管理</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'review' }"
+        type="button"
+        title="Anki复习"
+        @click="$emit('open-anki-review')"
+      >
+        <span class="nav-icon">◉</span>
+        <span>Anki复习</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'materials' }"
+        type="button"
+        title="学习资料"
+        @click="$emit('open-materials')"
+      >
+        <span class="nav-icon">▰</span>
+        <span>学习资料</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: activeView === 'statistics' }"
+        type="button"
+        title="统计"
+        @click="$emit('open-statistics')"
+      >
+        <span class="nav-icon">▥</span>
+        <span>统计</span>
+      </button>
+
+      <button class="nav-item nav-item-disabled" type="button" disabled title="设置">
+        <span class="nav-icon">⚙</span>
+        <span>设置</span>
+      </button>
+    </nav>
+
+    <section
+      v-if="showHistory"
+      class="history-sidebar"
+      :style="{ width: sidebarWidth ? `${sidebarWidth}px` : undefined }"
+    >
+      <div class="history-header">
+        <div class="logo">
+          <div class="logo-icon">L</div>
+          <span>LearningAgent</span>
+        </div>
+        <button class="collapse-button" type="button" title="收起历史会话">←</button>
       </div>
 
-      <span>
-        LearningAgent
-      </span>
-    </div>
+      <button
+        class="new-chat"
+        type="button"
+        @click="$emit('new-chat')"
+      >
+        <span class="plus">＋</span>
+        新建会话
+      </button>
 
-    <!-- 新建会话 -->
-    <button
-      class="new-chat"
-      @click="$emit('new-chat')"
-    >
-      <span class="plus">＋</span>
-      新建会话
-    </button>
+      <div class="section-title">历史会话</div>
 
-    <button
-      class="anki-entry"
-      type="button"
-      @click="$emit('open-anki')"
-    >
-      <span class="anki-entry-icon">✦</span>
-      新增卡片
-    </button>
-
-    <button
-      class="anki-entry"
-      type="button"
-      @click="$emit('open-anki-manager')"
-    >
-      <span class="anki-entry-icon">▱</span>
-      卡片管理
-    </button>
-
-    <!-- 最近会话 -->
-    <div class="section-title">
-      最近会话
-    </div>
-
-    <div class="session-list">
+      <div class="session-list">
 
       <div
         v-for="session in sessions"
@@ -106,13 +163,14 @@
         暂无会话
       </div>
 
-    </div>
+      </div>
 
-    <div
-      class="sidebar-resizer"
-      title="拖动调整侧栏宽度"
-      @pointerdown="startResize"
-    />
+      <div
+        class="sidebar-resizer"
+        title="拖动调整历史会话栏宽度"
+        @pointerdown="startResize"
+      />
+    </section>
 
   </aside>
 </template>
@@ -124,12 +182,18 @@ import type { ChatSession } from '../../types/chat'
 const props = defineProps<{
   currentSession: string
   sessions: ChatSession[]
+  activeView: 'home' | 'chat' | 'anki' | 'review' | 'statistics' | 'materials'
+  showHistory: boolean
 }>()
 
 const emit = defineEmits<{
+  'open-home': []
+  'open-chat': []
   'new-chat': []
-  'open-anki': []
   'open-anki-manager': []
+  'open-anki-review': []
+  'open-statistics': []
+  'open-materials': []
   'select-session': [sessionId: string]
   rename: [sessionId: string, title: string]
   delete: [sessionId: string]
@@ -204,7 +268,72 @@ function deleteSession(sessionId: string) {
 </script>
 
 <style scoped>
-.sidebar {
+.sidebar-shell {
+  display: flex;
+  height: 100vh;
+  flex-shrink: 0;
+  background: #f7f7f8;
+  border-right: 1px solid #e5e5e5;
+}
+
+.app-nav {
+  width: 174px;
+  height: 100vh;
+  flex-shrink: 0;
+  padding: 22px 10px;
+  background: #fff;
+  border-right: 1px solid #e8e8e8;
+}
+
+.nav-brand {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 22px 8px;
+  border-radius: 9px;
+  background: #111;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nav-item {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 2px 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #655c52;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  background: #f0ede8;
+  color: #715e4b;
+}
+
+.nav-icon {
+  width: 18px;
+  color: #a08c75;
+  font-size: 16px;
+  text-align: center;
+}
+
+.nav-item.active .nav-icon {
+  color: #8a735a;
+}
+
+.history-sidebar {
   position: relative;
 
   width: clamp(200px, 22vw, 300px);
@@ -215,8 +344,28 @@ function deleteSession(sessionId: string) {
   padding: 20px 14px;
 
   background: #f7f7f8;
+}
 
-  border-right: 1px solid #e5e5e5;
+.history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.collapse-button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8793a5;
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.collapse-button:hover {
+  background: #e9edf2;
 }
 
 .sidebar-resizer {

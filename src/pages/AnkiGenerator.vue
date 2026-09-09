@@ -6,13 +6,9 @@
         <h1>{{ isEditing ? '编辑卡片' : '制作一张可复习的卡片' }}</h1>
         <p>{{ isEditing ? '修改卡片内容，保留已有的复习进度。' : '把刚刚理解的知识点压缩成一次清晰的记忆提取。' }}</p>
       </div>
-      <button v-if="isEditing" class="refresh-button" type="button" @click="$emit('close')">
+      <button class="refresh-button" type="button" @click="$emit('close')">
         <span aria-hidden="true">←</span>
         返回卡片管理
-      </button>
-      <button v-else class="refresh-button" type="button" :disabled="loadingDecks" @click="loadDecks">
-        <span aria-hidden="true">↻</span>
-        刷新牌组
       </button>
     </header>
 
@@ -123,6 +119,11 @@ import { marked } from 'marked'
 
 import { createCard, createDeck, getSubdecks, updateCardContent } from '../services/anki'
 import type { Card, Deck } from '../types/anki'
+
+type DeckNode = {
+  deck: Deck
+  children: DeckNode[]
+}
 
 const props = defineProps<{
   editingCard?: Card | null
@@ -251,12 +252,13 @@ async function loadDecks() {
   errorMessage.value = ''
 
   try {
-    const loadedDecks = await getSubdecks('')
-    decks.value = loadedDecks
+    const rootDecks = await getSubdecks('')
+    const deckTree = await Promise.all(rootDecks.map(deck => loadDeckNode(deck)))
+    decks.value = flattenDeckTree(deckTree)
 
-    if (loadedDecks.length > 0) {
-      if (!selectedDeckPath.value) {
-        selectedDeckPath.value = loadedDecks[0].path
+    if (decks.value.length > 0) {
+      if (!selectedDeckPath.value || !decks.value.some(deck => deck.path === selectedDeckPath.value)) {
+        selectedDeckPath.value = decks.value[0].path
       }
     }
 
@@ -266,6 +268,31 @@ async function loadDecks() {
   } finally {
     loadingDecks.value = false
   }
+}
+
+async function loadDeckNode(deck: Deck): Promise<DeckNode> {
+  const children = await getSubdecks(deck.path)
+  return {
+    deck,
+    children: await Promise.all(children.map(child => loadDeckNode(child))),
+  }
+}
+
+function aggregateCardCount(node: DeckNode): number {
+  return node.deck.cardCount + node.children.reduce(
+    (total, child) => total + aggregateCardCount(child),
+    0,
+  )
+}
+
+function flattenDeckTree(nodes: DeckNode[]): Deck[] {
+  return nodes.flatMap(node => [
+    {
+      ...node.deck,
+      cardCount: aggregateCardCount(node),
+    },
+    ...flattenDeckTree(node.children),
+  ])
 }
 
 async function createNewDeck() {
@@ -284,6 +311,7 @@ async function createNewDeck() {
     newDeckPath.value = ''
     showCreateDeck.value = false
     successMessage.value = `牌组“${path}”已创建并存入 Anki 数据库。`
+    await loadDecks()
   } catch (error) {
     console.error(error)
     errorMessage.value = '牌组创建失败，请检查牌组路径后重试。'

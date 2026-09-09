@@ -5,12 +5,22 @@
     <ChatSidebar
       :current-session="currentSession"
       :sessions="sessions"
+      :active-view="activeView"
+      :show-history="!showAnkiGenerator && !showAnkiManager && !showReview && !showStatistics && !showMaterials"
+
+      @open-home="openHome"
+
+      @open-chat="openChat"
 
       @new-chat="openNewSession"
 
-      @open-anki="openAnkiGenerator"
-
       @open-anki-manager="openAnkiManager"
+
+      @open-anki-review="openAnkiReview"
+
+      @open-statistics="openStatistics"
+
+      @open-materials="openMaterials"
 
       @select-session="selectSession"
 
@@ -27,7 +37,22 @@
 
     <AnkiManager
       v-else-if="showAnkiManager"
+      @create-card="openNewCard"
       @edit-card="openCardEditor"
+    />
+
+    <AnkiReview
+      v-else-if="showReview"
+      @browse="openAnkiManager"
+      @edit-card="openCardEditor"
+    />
+
+    <Statistics
+      v-else-if="showStatistics"
+    />
+
+    <Materials
+      v-else-if="showMaterials"
     />
 
     <!-- 新会话预备页面 -->
@@ -135,7 +160,10 @@ import ChatSidebar from './components/chat/ChatSidebar.vue'
 import ChatMessage from './components/chat/ChatMessage.vue'
 import AnkiGenerator from './pages/AnkiGenerator.vue'
 import AnkiManager from './pages/AnkiManager.vue'
+import AnkiReview from './pages/AnkiReview.vue'
 import NewSession from './pages/NewSession.vue'
+import Statistics from './pages/Statistics.vue'
+import Materials from './pages/Materials.vue'
 
 import type {
   AgentType,
@@ -157,7 +185,15 @@ const showAnkiGenerator = ref(false)
 
 const showAnkiManager = ref(false)
 
+const showReview = ref(false)
+
+const showStatistics = ref(false)
+
+const showMaterials = ref(false)
+
 const editingCard = ref<Card | null>(null)
+
+const activeView = ref<'home' | 'chat' | 'anki' | 'review' | 'statistics' | 'materials'>('home')
 
 const currentAgent = ref<AgentType>('math')
 
@@ -219,27 +255,97 @@ const currentAgentInfo = computed(() => {
 function openNewSession() {
   showAnkiGenerator.value = false
   showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
   editingCard.value = null
+  activeView.value = 'chat'
   showNewSession.value = true
-}
-
-function openAnkiGenerator() {
-  showNewSession.value = false
-  showAnkiManager.value = false
-  editingCard.value = null
-  showAnkiGenerator.value = true
 }
 
 function openAnkiManager() {
   showNewSession.value = false
   showAnkiGenerator.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
   editingCard.value = null
+  activeView.value = 'anki'
   showAnkiManager.value = true
+}
+
+function openAnkiReview() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  showReview.value = true
+  showStatistics.value = false
+  showMaterials.value = false
+  editingCard.value = null
+  activeView.value = 'review'
+}
+
+function openNewCard() {
+  showNewSession.value = false
+  showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
+  editingCard.value = null
+  activeView.value = 'anki'
+  showAnkiGenerator.value = true
+}
+
+function openStatistics() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  showReview.value = false
+  showMaterials.value = false
+  showStatistics.value = true
+  editingCard.value = null
+  activeView.value = 'statistics'
+}
+
+function openMaterials() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = true
+  editingCard.value = null
+  activeView.value = 'materials'
+}
+
+function openHome() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
+  editingCard.value = null
+  activeView.value = 'home'
+}
+
+function openChat() {
+  showNewSession.value = false
+  showAnkiGenerator.value = false
+  showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
+  editingCard.value = null
+  activeView.value = 'chat'
 }
 
 function openCardEditor(card: Card) {
   showNewSession.value = false
   showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
   editingCard.value = card
   showAnkiGenerator.value = true
 }
@@ -279,7 +385,11 @@ async function startNewSession(
   showNewSession.value = false
   showAnkiGenerator.value = false
   showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
   editingCard.value = null
+  activeView.value = 'chat'
 
   /*
    * 把用户第一次的问题
@@ -428,7 +538,11 @@ function selectSession(
   showNewSession.value = false
   showAnkiGenerator.value = false
   showAnkiManager.value = false
+  showReview.value = false
+  showStatistics.value = false
+  showMaterials.value = false
   editingCard.value = null
+  activeView.value = 'chat'
 }
 
 
