@@ -388,3 +388,77 @@ pub fn search_cards(
     let rows = read_card_rows(conn, &sql, params)?;
     rows.into_iter().map(|row| card_from_row(conn, row)).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository::{db, deck};
+
+    fn setup_card() -> (Connection, i64) {
+        let conn = db::open_in_memory().unwrap();
+        let deck_path = deck::create_deck(&conn, "/测试").unwrap();
+        let deck_id = deck::resolve_deck(&conn, &deck_path).unwrap().unwrap();
+        let card_id = create_card(&conn, deck_id, "front", "back").unwrap();
+        (conn, card_id)
+    }
+
+    #[test]
+    fn migration_contains_scheduling_columns() {
+        let conn = db::open_in_memory().unwrap();
+        let mut stmt = conn.prepare("PRAGMA table_info(card)").unwrap();
+        let names: Vec<String> = stmt
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect();
+
+        assert!(names.iter().any(|name| name == "algorithm"));
+        assert!(names.iter().any(|name| name == "scheduler_state"));
+    }
+
+    #[test]
+    fn schedule_round_trip_preserves_algorithm_state() {
+        let (conn, card_id) = setup_card();
+        let before = find_schedule(&conn, card_id).unwrap().unwrap();
+        assert_eq!(before.state, CardState::New);
+        assert_eq!(before.algorithm, "sm2");
+        assert!(before.scheduler_state.is_none());
+
+        let record = ScheduleRecord {
+            state: CardState::Review,
+            algorithm: "fsrs".into(),
+            scheduler_state: Some(r#"{"difficulty":5.1,"stability":3.7}"#.into()),
+            due_at: Some("2026-01-08T12:00:00+00:00".into()),
+        };
+        save_schedule(&conn, card_id, &record).unwrap();
+
+        let after = find_schedule(&conn, card_id).unwrap().unwrap();
+        assert_eq!(after.state, CardState::Review);
+        assert_eq!(after.algorithm, "fsrs");
+        assert_eq!(after.scheduler_state, record.scheduler_state);
+        assert_eq!(after.due_at, record.due_at);
+    }
+
+    #[test]
+    fn missing_card_and_state_round_trip_are_reported() {
+        let (conn, card_id) = setup_card();
+        assert!(find_schedule(&conn, 999999).unwrap().is_none());
+        assert_eq!(save_schedule(&conn, 999999, &ScheduleRecord {
+            state: CardState::New,
+            algorithm: "sm2".into(),
+            scheduler_state: None,
+            due_at: None,
+        }).unwrap_err().code, "not_found");
+
+        let record = ScheduleRecord {
+            state: CardState::Learning,
+            algorithm: "sm2".into(),
+            scheduler_state: Some("not-json-yet".into()),
+            due_at: None,
+        };
+        save_schedule(&conn, card_id, &record).unwrap();
+        let saved = find_schedule(&conn, card_id).unwrap().unwrap();
+        assert_eq!(saved.state, CardState::Learning);
+        assert_eq!(saved.scheduler_state.as_deref(), Some("not-json-yet"));
+    }
+}
