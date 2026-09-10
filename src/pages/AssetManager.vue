@@ -23,30 +23,45 @@
     </header>
 
     <section class="materials-toolbar">
-      <el-tabs v-model="selectedSubject" class="subject-tabs" type="card">
-        <el-tab-pane v-for="subject in subjects" :key="subject" :name="subject">
-          <template #label>
-            {{ subject }}
-            <span>{{ subjectCount(subject) }}</span>
+      <el-popover v-model:visible="subjectMenuOpen" class="subject-picker-popover" placement="bottom-start"
+        :width="270" trigger="click">
+        <template #reference>
+          <el-button class="subject-picker" plain>
+            <span class="subject-picker-label">{{ selectedSubject }}资料</span>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+        </template>
+        <el-tree
+          class="subject-tree"
+          :data="subjectTreeData"
+          node-key="value"
+          :props="subjectTreeProps"
+          highlight-current
+          :current-node-key="selectedSubject"
+          @node-click="handleSubjectNodeClick"
+        >
+          <template #default="{ data }">
+            <span class="subject-tree-node" :title="data.folder ? `物理存储：${data.folder}` : '全部学科文件夹'">
+              <span class="subject-tree-label">{{ data.label }}</span>
+              <span class="subject-tree-count">{{ data.count }}</span>
+            </span>
           </template>
-        </el-tab-pane>
-      </el-tabs>
+        </el-tree>
+      </el-popover>
+
+      <!-- 搜索框：位于排序左侧 -->
+      <el-input v-model="searchKeyword" class="material-search" clearable placeholder="搜索资料名称" aria-label="搜索资料">
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+
       <div class="sort-control">
         <span>排序</span>
         <el-select v-model="sortBy" class="sort-select" aria-label="资料排序" size="small">
           <el-option label="最近添加" value="updated" />
           <el-option label="名称" value="name" />
           <el-option label="文件大小" value="size" />
-        </el-select>
-      </div>
-      <div class="material-filters">
-        <el-input v-model="searchKeyword" class="material-search" clearable placeholder="搜索资料名称或格式" aria-label="搜索资料">
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-select v-model="formatFilter" class="format-select" aria-label="按文件格式筛选" size="small">
-          <el-option v-for="option in formatOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
       </div>
     </section>
@@ -60,7 +75,9 @@
           <span class="file-type">{{ material.typeLabel }}</span>
         </div>
         <div class="material-body">
-          <div class="material-subject" :class="`format-accent-${material.kind}`">{{ material.subject }}</div>
+          <div class="material-subject" :class="`format-accent-${material.kind}`" :title="`物理存储：${material.folder}`">
+            {{ material.subject }}
+          </div>
           <h2 :title="material.name">{{ material.name }}</h2>
           <div class="material-meta">
             <span>{{ formatSize(material.size) }}</span>
@@ -81,8 +98,8 @@
     </section>
 
     <section v-else class="empty-materials">
-      <el-empty :description="materials.length ? ((searchKeyword || formatFilter) ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
-        <p>{{ materials.length ? ((searchKeyword || formatFilter) ? '调整搜索关键词或文件格式，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
+      <el-empty :description="materials.length ? (searchKeyword ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
+        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
         <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
       </el-empty>
     </section>
@@ -92,13 +109,16 @@
       <el-form label-position="top" @submit.prevent="confirmUpload">
         <el-form-item label="所属学科">
           <el-select v-model="pendingSubject" class="dialog-control">
-            <el-option v-for="subject in subjectOptions" :key="subject" :label="subject" :value="subject" />
+            <el-option v-for="item in subjectFolders" :key="item.name" :label="item.name" :value="item.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="或新建学科">
           <el-input v-model="newSubject" placeholder="例如：操作系统" />
         </el-form-item>
       </el-form>
+      <p class="target-folder">
+        归档到物理文件夹：<code>{{ pendingFolderPath || '—' }}</code>
+      </p>
       <template #footer>
         <el-button @click="cancelUpload">取消</el-button>
         <el-button type="primary" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())" @click="confirmUpload">
@@ -110,12 +130,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { Delete, FolderOpened, Plus, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, FolderOpened, Plus, Search } from '@element-plus/icons-vue'
 
 type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'word' | 'document'
+
+/** 学科 <-> 物理文件夹 的一一映射 */
+type SubjectFolder = {
+  name: string
+  folder: string
+}
 
 type Material = {
   id: string
@@ -124,33 +150,57 @@ type Material = {
   typeLabel: string
   kind: MaterialKind
   subject: string
+  /** 该资料在总仓库中的物理存储文件夹 */
+  folder: string
   size: number
   addedAt: string
   url: string
 }
 
+type UploadMaterialRequest = {
+  file: File
+  subject: string
+  folder: string
+}
+
 const uploadRef = ref<UploadInstance>()
 const materials = ref<Material[]>([])
+
+/** 学科与物理文件夹的映射表：来自服务接口 */
+const subjectFolders = ref<SubjectFolder[]>([])
+
 const selectedSubject = ref('全部')
 const pendingFiles = ref<File[]>([])
-const pendingSubject = ref('数学')
+const pendingSubject = ref('')
 const newSubject = ref('')
 const showSubjectDialog = ref(false)
 const uploadError = ref('')
 const sortBy = ref<'updated' | 'name' | 'size'>('updated')
 const searchKeyword = ref('')
-const formatFilter = ref<MaterialKind | ''>('')
+const subjectMenuOpen = ref(false)
 
-const subjectOptions = ['数学', '英语', '操作系统']
-const subjects = computed(() => ['全部', ...subjectOptions.filter(subject => materials.value.some(item => item.subject === subject))])
-const formatOptions: Array<{ label: string; value: MaterialKind | '' }> = [
-  { label: '全部格式', value: '' },
-  { label: 'PDF', value: 'pdf' },
-  { label: 'PPT / PPTX', value: 'slides' },
-  { label: 'Word', value: 'word' },
-  { label: '笔记', value: 'note' },
-  { label: '图片', value: 'image' },
-]
+const subjects = computed(() => ['全部', ...subjectFolders.value.map(item => item.name)])
+
+const subjectTreeData = computed(() => subjects.value.map(subject => ({
+  label: subject === '全部' ? '全部资料' : subject,
+  value: subject,
+  count: subjectCount(subject),
+  folder: subject === '全部'
+    ? ''
+    : subjectFolders.value.find(item => item.name === subject)?.folder ?? '',
+})))
+
+const subjectTreeProps = { label: 'label', children: 'children' }
+
+/** 弹窗中展示的目标文件夹（新学科按同一规则推导，保证一一对应） */
+const pendingFolderPath = computed(() => {
+  const name = newSubject.value.trim()
+  if (name) {
+    const existing = subjectFolders.value.find(item => item.name === name)
+    return existing ? existing.folder : `materials/${sanitizeFolderName(name)}`
+  }
+  return subjectFolders.value.find(item => item.name === pendingSubject.value)?.folder ?? ''
+})
 
 const filteredMaterials = computed(() => {
   const subjectFiltered = selectedSubject.value === '全部'
@@ -158,12 +208,10 @@ const filteredMaterials = computed(() => {
     : materials.value.filter(material => material.subject === selectedSubject.value)
   const normalizedKeyword = searchKeyword.value.trim().toLocaleLowerCase()
   const filtered = subjectFiltered.filter(material => {
-    const matchesFormat = !formatFilter.value || material.kind === formatFilter.value
     const searchableText = [material.name, material.extension, material.typeLabel, material.subject]
       .join(' ')
       .toLocaleLowerCase()
-    const matchesKeyword = !normalizedKeyword || searchableText.includes(normalizedKeyword)
-    return matchesFormat && matchesKeyword
+    return !normalizedKeyword || searchableText.includes(normalizedKeyword)
   })
 
   return [...filtered].sort((left, right) => {
@@ -181,6 +229,88 @@ function subjectCount(subject: string) {
   return subject === '全部'
     ? materials.value.length
     : materials.value.filter(material => material.subject === subject).length
+}
+
+/** 保证一个学科只会生成一个文件夹，且文件夹名唯一 */
+function ensureSubjectFolder(subject: string) {
+  const existing = subjectFolders.value.find(item => item.name === subject)
+  if (existing) {
+    return existing.folder
+  }
+
+  const base = `materials/${sanitizeFolderName(subject)}`
+  let folder = base
+  let suffix = 2
+  while (subjectFolders.value.some(item => item.folder === folder)) {
+    folder = `${base}-${suffix}`
+    suffix += 1
+  }
+
+  subjectFolders.value.push({ name: subject, folder })
+  return folder
+}
+
+/** 把学科名转换成安全的文件夹名 */
+function sanitizeFolderName(name: string) {
+  const cleaned = name
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+  return cleaned || 'untitled'
+}
+
+// TODO:
+// 后面替换成真实后端 API：GET /api/subject-folders
+async function fetchSubjectFolders(): Promise<SubjectFolder[]> {
+  console.log('获取学科与物理文件夹映射')
+
+  return [
+    { name: '数学', folder: 'materials/math' },
+    { name: '英语', folder: 'materials/english' },
+    { name: '操作系统', folder: 'materials/os' },
+  ]
+}
+
+// TODO:
+// 后面替换成真实后端 API：GET /api/materials
+async function fetchMaterials(): Promise<Material[]> {
+  console.log('获取资料列表')
+
+  return []
+}
+
+// TODO:
+// 后面替换成真实后端 API：POST /api/materials
+async function uploadMaterial(request: UploadMaterialRequest): Promise<Material> {
+  const { file, subject, folder } = request
+
+  console.log('发送给后端：', request)
+
+  return {
+    id: `${Date.now()}-${file.name}-${Math.random()}`,
+    name: file.name,
+    extension: getExtension(file.name),
+    typeLabel: getTypeLabel(file.name),
+    kind: getMaterialKind(file.name),
+    subject,
+    folder,
+    size: file.size,
+    addedAt: '刚刚',
+    url: URL.createObjectURL(file),
+  }
+}
+
+// TODO:
+// 后面替换成真实后端 API：DELETE /api/materials/:id
+async function deleteMaterial(id: string): Promise<void> {
+  console.log('删除资料：', id)
+}
+
+function handleSubjectNodeClick(data: { value: string }) {
+  selectedSubject.value = data.value
+  subjectMenuOpen.value = false
 }
 
 function openUploadPicker() {
@@ -213,30 +343,22 @@ function isSupportedFile(file: File) {
   return /\.(pdf|ppt|pptx|doc|docx|txt|md|markdown|png|jpg|jpeg|webp)$/i.test(file.name)
 }
 
-function confirmUpload() {
+async function confirmUpload() {
   const subject = newSubject.value.trim() || pendingSubject.value
   if (!subject || !pendingFiles.value.length) {
     return
   }
 
-  pendingFiles.value.forEach(file => {
-    materials.value.push({
-      id: `${Date.now()}-${file.name}-${Math.random()}`,
-      name: file.name,
-      extension: getExtension(file.name),
-      typeLabel: getTypeLabel(file.name),
-      kind: getMaterialKind(file.name),
-      subject,
-      size: file.size,
-      addedAt: '刚刚',
-      url: URL.createObjectURL(file),
-    })
-  })
+  // 学科 -> 物理文件夹，一一对应
+  const folder = ensureSubjectFolder(subject)
 
-  if (!subjectOptions.includes(subject)) {
-    subjectOptions.push(subject)
-  }
+  const uploadedMaterials = await Promise.all(
+    pendingFiles.value.map(file => uploadMaterial({ file, subject, folder }))
+  )
+  materials.value.push(...uploadedMaterials)
+
   selectedSubject.value = subject
+  subjectMenuOpen.value = false
   cancelUpload()
 }
 
@@ -255,11 +377,12 @@ function openMaterial(material: Material) {
   window.open(material.url, '_blank', 'noopener,noreferrer')
 }
 
-function removeMaterial(id: string) {
+async function removeMaterial(id: string) {
   const material = materials.value.find(item => item.id === id)
   if (!material) {
     return
   }
+  await deleteMaterial(id)
   URL.revokeObjectURL(material.url)
   materials.value = materials.value.filter(item => item.id !== id)
 }
@@ -295,6 +418,14 @@ function formatSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+onMounted(async () => {
+  subjectFolders.value = await fetchSubjectFolders()
+  materials.value = await fetchMaterials()
+  if (subjectFolders.value.length) {
+    pendingSubject.value = subjectFolders.value[0].name
+  }
+})
+
 onBeforeUnmount(() => {
   materials.value.forEach(material => URL.revokeObjectURL(material.url))
 })
@@ -314,7 +445,8 @@ onBeforeUnmount(() => {
 .materials-header,
 .materials-toolbar,
 .materials-grid,
-.empty-materials {
+.empty-materials,
+.feedback {
   width: min(1220px, 100%);
   margin: 0 auto;
 }
@@ -365,84 +497,80 @@ button {
   cursor: pointer;
 }
 
-.dark-button,
-.outline-button,
-.remove-button {
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.dark-button {
-  padding: 10px 14px;
-  border: 1px solid #25231f;
-  background: #25231f;
-  color: #fff;
-}
-
-.outline-button {
-  padding: 8px 11px;
-  border: 1px solid #d8d3ca;
-  background: #fff;
-  color: #514b43;
-}
-
-.hidden-file-input {
-  display: none;
-}
-
 .materials-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 18px;
   padding-bottom: 12px;
   border-bottom: 1px solid #e5e1da;
 }
 
-.subject-tabs {
-  flex: 1 1 280px;
-  min-width: 280px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.subject-picker {
+  flex: 0 0 220px;
+  width: 220px;
+  justify-content: space-between;
+  border-color: var(--learning-border);
+  color: var(--learning-text-secondary);
+  text-align: left;
 }
 
-.material-filters {
+.subject-picker:hover,
+.subject-picker:focus {
+  border-color: #b7d0f8;
+  background: #eef5ff;
+  color: var(--learning-primary);
+}
+
+.subject-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subject-tree {
+  margin: -6px;
+  color: var(--learning-text);
+}
+
+.subject-tree :deep(.el-tree-node__content) {
+  height: 38px;
+  border-radius: 6px;
+}
+
+.subject-tree :deep(.el-tree-node__content:hover),
+.subject-tree :deep(.is-current > .el-tree-node__content) {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.subject-tree-node {
+  width: 100%;
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 8px;
+  font-size: 13px;
 }
 
-.material-search {
-  width: 220px;
+.subject-tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.format-select {
-  width: 130px;
-}
-
-.subject-tab {
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #8b8278;
-  font-size: 12px;
-}
-
-.subject-tab span {
-  margin-left: 4px;
-  color: #b3aaa0;
+.subject-tree-count {
+  flex-shrink: 0;
+  color: var(--learning-text-muted);
   font-size: 11px;
 }
 
-.subject-tab:hover,
-.subject-tab.active {
-  background: #f0ede8;
-  color: #715e4b;
+/* 搜索框：紧跟学科选择器，位于排序左侧 */
+.material-search {
+  flex: 0 0 260px;
+  width: 260px;
 }
 
 .sort-control {
@@ -450,25 +578,13 @@ button {
   align-items: center;
   flex-shrink: 0;
   gap: 8px;
+  margin-left: auto;
   color: #9a9289;
   font-size: 12px;
 }
 
 .sort-select {
-  width: 160px;
-}
-
-.sort-control select,
-.modal select,
-.modal input {
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #dedbd5;
-  border-radius: 6px;
-  outline: none;
-  background: #fff;
-  color: #514b43;
-  font-size: 12px;
+  width: 150px;
 }
 
 .materials-grid {
@@ -553,13 +669,6 @@ button {
   margin-top: 15px;
 }
 
-.remove-button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #a65345;
-}
-
 .empty-materials {
   display: flex;
   align-items: center;
@@ -572,80 +681,13 @@ button {
   text-align: center;
 }
 
-.empty-icon {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #eee5da;
-  color: #896e50;
-  font-size: 25px;
-}
-
-.empty-materials h2 {
-  margin-top: 17px;
-  color: #5e554b;
-  font-size: 18px;
-}
-
-.empty-materials p {
-  margin: 8px 0 18px;
-  color: #9a9289;
-  font-size: 13px;
-}
-
 .feedback {
-  width: min(1220px, 100%);
-  margin: 0 auto 16px;
+  margin-bottom: 16px;
   padding: 9px 11px;
   border-radius: 6px;
   background: #fff1ee;
   color: #a34e3f;
   font-size: 12px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  z-index: 30;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(33, 30, 26, 0.35);
-}
-
-.modal {
-  width: min(460px, 100%);
-  padding: 24px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 20px 60px rgba(26, 22, 18, 0.2);
-}
-
-.modal-heading,
-.modal-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.modal h2 {
-  margin-top: 7px;
-  font-size: 20px;
-}
-
-.close-button {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 6px;
-  background: #f1efec;
-  color: #71685f;
-  font-size: 20px;
 }
 
 .selected-files {
@@ -655,22 +697,29 @@ button {
   line-height: 1.5;
 }
 
-.field-label {
-  display: block;
-  margin: 20px 0 8px;
-  color: #4c4944;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.modal select,
-.modal input {
+.dialog-control {
   width: 100%;
 }
 
-.modal-actions {
-  justify-content: flex-end;
-  margin-top: 24px;
+.target-folder {
+  margin-top: 4px;
+  color: var(--learning-text-muted);
+  font-size: 12px;
+}
+
+.target-folder code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eaf2ff;
+  color: var(--learning-primary);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 1024px) {
+  .sort-control {
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 900px) {
@@ -690,27 +739,24 @@ button {
   }
 
   .materials-toolbar {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
   }
 
-  .sort-control,
-  .sort-select {
-    width: 100%;
-  }
-
-  .material-filters {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
+  .subject-picker,
   .material-search {
-    flex: 1 1 180px;
-    width: auto;
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
   }
 
-  .format-select {
-    flex: 1 1 130px;
+  .sort-control {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .sort-select {
+    flex: 1 1 auto;
     width: auto;
   }
 
@@ -738,20 +784,6 @@ button {
 
 .materials-page .materials-toolbar {
   border-bottom-color: var(--learning-border);
-}
-
-.materials-page .subject-tab {
-  color: var(--learning-text-secondary);
-}
-
-.materials-page .subject-tab span {
-  color: var(--learning-text-muted);
-}
-
-.materials-page .subject-tab:hover,
-.materials-page .subject-tab.active {
-  background: #eaf2ff;
-  color: var(--learning-primary);
 }
 
 .materials-page .material-card {
@@ -806,22 +838,9 @@ button {
   color: var(--learning-text);
 }
 
-.materials-page .remove-button {
-  color: var(--el-color-danger);
-}
-
 .materials-page .empty-materials {
   border-color: #b7d0f8;
   background: rgba(255, 255, 255, 0.72);
-}
-
-.materials-page .empty-icon {
-  background: #eaf2ff;
-  color: var(--learning-primary);
-}
-
-.materials-page .empty-materials h2 {
-  color: var(--learning-text);
 }
 
 .materials-page .material-actions {
@@ -912,18 +931,5 @@ button {
 .materials-page .feedback {
   background: var(--el-color-danger-light-9);
   color: var(--el-color-danger);
-}
-
-.materials-page .modal-backdrop {
-  background: rgba(15, 35, 65, 0.38);
-}
-
-.materials-page .modal {
-  box-shadow: 0 20px 60px rgba(35, 75, 130, 0.2);
-}
-
-.materials-page .close-button {
-  background: #eaf2ff;
-  color: var(--learning-primary);
 }
 </style>
