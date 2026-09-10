@@ -1,10 +1,15 @@
 import type {
+  UploadImageRequest,
+  UploadedImage,
+} from '../types/assets'
+import type {
   Card,
   CardGrade,
   CardQuery,
   CardSearch,
   Deck,
   NewCard,
+  ReviewOption,
   ReviewOutcome,
   UpdateCardContent,
 } from '../types/anki'
@@ -64,6 +69,8 @@ export class AnkiMock {
         return this.moveCard(String(payload.cardId ?? ''), String(payload.targetDeckPath ?? ''))
       case 'anki_grade_card':
         return this.gradeCard(String(payload.cardId ?? ''), payload.grade as CardGrade)
+      case 'anki_get_review_options':
+        return this.getReviewOptions(String(payload.cardId ?? ''))
       case 'anki_reset_card':
         return this.resetCard(String(payload.cardId ?? ''))
       case 'anki_update_card_content':
@@ -75,8 +82,9 @@ export class AnkiMock {
         return this.deleteDeck(String(payload.deckPath ?? ''))
       case 'anki_delete_card':
         return this.deleteCard(String(payload.cardId ?? ''))
+      case 'anki_upload_image':
+        return this.uploadImage((payload.input ?? {}) as Partial<UploadImageRequest>)
       default:
-        console.warn(`[mock] 未处理的命令: ${cmd}`)
         return undefined
     }
   }
@@ -264,6 +272,24 @@ export class AnkiMock {
     return { cardId, state, dueAt }
   }
 
+  private getReviewOptions(cardId: string): ReviewOption[] {
+    this.getCard(cardId)
+    const intervals: Record<CardGrade, { days: number; label: string }> = {
+      again: { days: 0, label: '< 10 分' },
+      hard: { days: 3, label: '3 天' },
+      good: { days: 7, label: '7 天' },
+      easy: { days: 14, label: '14 天' },
+    }
+
+    return (Object.keys(intervals) as CardGrade[]).map(grade => ({
+      grade,
+      intervalLabel: intervals[grade].label,
+      dueAt: intervals[grade].days === 0
+        ? new Date(Date.now() + 10 * 60_000).toISOString()
+        : new Date(Date.now() + intervals[grade].days * 86_400_000).toISOString(),
+    }))
+  }
+
   private resetCard(cardId: string): ReviewOutcome {
     const card = this.cards.get(cardId)
     if (!card) throw new Error(`卡片不存在: ${cardId}`)
@@ -271,6 +297,20 @@ export class AnkiMock {
     card.dueAt = null
     card.updatedAt = nowIso()
     return { cardId, state: 'new', dueAt: null }
+  }
+
+  private uploadImage(input: Partial<UploadImageRequest>): UploadedImage {
+    const name = String(input.name ?? '').trim()
+    const mimeType = String(input.mimeType ?? '')
+    const contentBase64 = String(input.contentBase64 ?? '')
+    if (!name || !mimeType.startsWith('image/') || !contentBase64) {
+      throw new Error('图片上传参数不完整')
+    }
+
+    return {
+      name,
+      url: `data:${mimeType};base64,${contentBase64}`,
+    }
   }
 
   // ---- 辅助 ----

@@ -8,27 +8,21 @@
         <span>Personal Learning OS</span>
       </div>
 
-      <el-button
-        class="collapse-button"
-        circle
-        text
-        :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
-        @click="emit('update:collapsed', !collapsed)"
-      >
-        <el-icon><Expand v-if="collapsed" /><Fold v-else /></el-icon>
+      <el-button class="collapse-button" circle text :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
+        @click="emit('update:collapsed', !collapsed)">
+        <el-icon>
+          <Expand v-if="collapsed" />
+          <Fold v-else />
+        </el-icon>
       </el-button>
     </div>
 
-    <el-menu
-      ref="menuRef"
-      class="navigation-menu"
-      :collapse="collapsed"
-      :default-active="activeView"
-      :collapse-transition="false"
-      @select="handleNavigation"
-    >
+    <el-menu ref="menuRef" class="navigation-menu" :collapse="collapsed" :default-active="activeView"
+      :collapse-transition="false" @select="handleNavigation">
       <el-menu-item v-for="item in navigationItems" :key="item.id" :index="item.id">
-        <el-icon><component :is="item.icon" /></el-icon>
+        <el-icon>
+          <component :is="item.icon" />
+        </el-icon>
         <template #title>{{ item.label }}</template>
       </el-menu-item>
     </el-menu>
@@ -43,27 +37,29 @@
         <el-empty v-if="sessions.length === 0" :image-size="52" description="暂无会话" />
 
         <div v-for="session in sessions" :key="session.id" class="session-row">
-          <el-button
-            class="session-button"
-            :class="{ active: currentSession === session.id }"
-            text
-            @click="emit('select-session', session.id)"
-          >
+          <el-button class="session-button" :class="{ active: currentSession === session.id }" text
+            @click="emit('select-session', session.id)">
             <span>{{ session.title }}</span>
           </el-button>
 
           <el-dropdown trigger="click" @command="handleSessionCommand(session.id, $event)">
             <el-button class="session-more" text circle title="会话操作">
-              <el-icon><MoreFilled /></el-icon>
+              <el-icon>
+                <MoreFilled />
+              </el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="rename">
-                  <el-icon><Edit /></el-icon>
+                  <el-icon>
+                    <Edit />
+                  </el-icon>
                   重命名
                 </el-dropdown-item>
                 <el-dropdown-item command="delete" divided>
-                  <el-icon><Delete /></el-icon>
+                  <el-icon>
+                    <Delete />
+                  </el-icon>
                   删除会话
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -73,13 +69,6 @@
       </el-scrollbar>
     </section>
 
-    <div class="sidebar-user">
-      <el-avatar :size="32">W</el-avatar>
-      <div v-if="!collapsed" class="sidebar-user-copy">
-        <strong>Wannamai</strong>
-        <span>考研学习者</span>
-      </div>
-    </div>
   </aside>
 </template>
 

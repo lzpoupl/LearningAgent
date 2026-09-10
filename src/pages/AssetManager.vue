@@ -6,40 +6,30 @@
         <h1>学习资料</h1>
         <p>PDF、PPT、笔记等非结构化学习资产</p>
       </div>
-      <el-upload
-        ref="uploadRef"
-        action="#"
-        :auto-upload="false"
-        :show-file-list="false"
-        multiple
-        accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
-        :on-change="handleFilesSelected"
-      >
+      <el-upload ref="uploadRef" action="#" :auto-upload="false" :show-file-list="false" multiple
+        accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp" :on-change="handleFilesSelected">
         <el-button type="primary">
-          <el-icon><Plus /></el-icon>
+          <el-icon>
+            <Plus />
+          </el-icon>
           添加资料
         </el-button>
       </el-upload>
     </header>
 
     <section class="materials-toolbar">
-      <el-popover v-model:visible="subjectMenuOpen" class="subject-picker-popover" placement="bottom-start"
-        :width="270" trigger="click">
+      <el-popover v-model:visible="subjectMenuOpen" class="subject-picker-popover" placement="bottom-start" :width="270"
+        trigger="click">
         <template #reference>
           <el-button class="subject-picker" plain>
             <span class="subject-picker-label">{{ selectedSubject }}资料</span>
-            <el-icon><ArrowDown /></el-icon>
+            <el-icon>
+              <ArrowDown />
+            </el-icon>
           </el-button>
         </template>
-        <el-tree
-          class="subject-tree"
-          :data="subjectTreeData"
-          node-key="value"
-          :props="subjectTreeProps"
-          highlight-current
-          :current-node-key="selectedSubject"
-          @node-click="handleSubjectNodeClick"
-        >
+        <el-tree class="subject-tree" :data="subjectTreeData" node-key="value" :props="subjectTreeProps"
+          highlight-current :current-node-key="selectedSubject" @node-click="handleSubjectNodeClick">
           <template #default="{ data }">
             <span class="subject-tree-node" :title="data.folder ? `物理存储：${data.folder}` : '全部学科文件夹'">
               <span class="subject-tree-label">{{ data.label }}</span>
@@ -52,7 +42,9 @@
       <!-- 搜索框：位于排序左侧 -->
       <el-input v-model="searchKeyword" class="material-search" clearable placeholder="搜索资料名称" aria-label="搜索资料">
         <template #prefix>
-          <el-icon><Search /></el-icon>
+          <el-icon>
+            <Search />
+          </el-icon>
         </template>
       </el-input>
 
@@ -69,7 +61,8 @@
     <div v-if="uploadError" class="feedback error" role="alert">{{ uploadError }}</div>
 
     <section v-if="filteredMaterials.length" class="materials-grid" aria-label="资料列表">
-      <el-card v-for="material in filteredMaterials" :key="material.id" class="material-card" shadow="hover" :body-style="{ padding: '0' }">
+      <el-card v-for="material in filteredMaterials" :key="material.id" class="material-card" shadow="hover"
+        :body-style="{ padding: '0' }">
         <div class="material-cover" :class="`cover-${material.kind}`">
           <span class="file-mark">{{ material.extension }}</span>
           <span class="file-type">{{ material.typeLabel }}</span>
@@ -84,14 +77,8 @@
             <span>添加于 {{ material.addedAt }}</span>
           </div>
           <div class="material-actions">
-            <el-button class="material-open-button" :class="`format-accent-${material.kind}`" type="primary" text size="small" @click="openMaterial(material)">
-              <el-icon><FolderOpened /></el-icon>
-              打开
-            </el-button>
-            <el-button class="material-remove-button" text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">
-              <el-icon><Delete /></el-icon>
-              删除
-            </el-button>
+            <el-button plain size="small" @click="openMaterial(material)">打开</el-button>
+            <el-button text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">移除</el-button>
           </div>
         </div>
       </el-card>
@@ -99,12 +86,15 @@
 
     <section v-else class="empty-materials">
       <el-empty :description="materials.length ? (searchKeyword ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
-        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
+        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT
+        或笔记文件，让学习资料集中在这里。' }}
+        </p>
         <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
       </el-empty>
     </section>
 
-    <el-dialog v-model="showSubjectDialog" title="添加学习资料" width="min(460px, 92vw)" destroy-on-close @closed="resetPendingUpload">
+    <el-dialog v-model="showSubjectDialog" title="添加学习资料" width="min(460px, 92vw)" destroy-on-close
+      @closed="resetPendingUpload">
       <p class="selected-files">已选择 {{ pendingFiles.length }} 个文件，每个文件会生成一个独立资料模块。</p>
       <el-form label-position="top" @submit.prevent="confirmUpload">
         <el-form-item label="所属学科">
@@ -121,7 +111,8 @@
       </p>
       <template #footer>
         <el-button @click="cancelUpload">取消</el-button>
-        <el-button type="primary" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())" @click="confirmUpload">
+        <el-button type="primary" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())"
+          @click="confirmUpload">
           添加资料
         </el-button>
       </template>
@@ -133,9 +124,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Delete, FolderOpened, Plus, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Plus, Search } from '@element-plus/icons-vue'
 
-type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'word' | 'document'
+type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'document'
 
 /** 学科 <-> 物理文件夹 的一一映射 */
 type SubjectFolder = {
@@ -203,16 +194,9 @@ const pendingFolderPath = computed(() => {
 })
 
 const filteredMaterials = computed(() => {
-  const subjectFiltered = selectedSubject.value === '全部'
+  const filtered = selectedSubject.value === '全部'
     ? materials.value
     : materials.value.filter(material => material.subject === selectedSubject.value)
-  const normalizedKeyword = searchKeyword.value.trim().toLocaleLowerCase()
-  const filtered = subjectFiltered.filter(material => {
-    const searchableText = [material.name, material.extension, material.typeLabel, material.subject]
-      .join(' ')
-      .toLocaleLowerCase()
-    return !normalizedKeyword || searchableText.includes(normalizedKeyword)
-  })
 
   return [...filtered].sort((left, right) => {
     if (sortBy.value === 'name') {
@@ -395,7 +379,6 @@ function getTypeLabel(name: string) {
   const extension = getExtension(name)
   if (extension === 'PDF') return 'PDF 文档'
   if (extension === 'PPT' || extension === 'PPTX') return '演示文稿'
-  if (extension === 'DOC' || extension === 'DOCX') return 'Word 文档'
   if (extension === 'MD' || extension === 'MARKDOWN' || extension === 'TXT') return '笔记'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return '图片'
   return '文档'
@@ -407,7 +390,6 @@ function getMaterialKind(name: string): MaterialKind {
   if (extension === 'PPT' || extension === 'PPTX') return 'slides'
   if (['MD', 'MARKDOWN', 'TXT'].includes(extension)) return 'note'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return 'image'
-  if (extension === 'DOC' || extension === 'DOCX') return 'word'
   return 'document'
 }
 
@@ -616,11 +598,30 @@ button {
   color: #765d45;
 }
 
-.cover-pdf { background: #f3e7df; color: #9d604b; }
-.cover-slides { background: #f1eadc; color: #967345; }
-.cover-note { background: #e9eee8; color: #647b67; }
-.cover-image { background: #e7ecee; color: #5f7680; }
-.cover-document { background: #ece9e4; color: #73695e; }
+.cover-pdf {
+  background: #f3e7df;
+  color: #9d604b;
+}
+
+.cover-slides {
+  background: #f1eadc;
+  color: #967345;
+}
+
+.cover-note {
+  background: #e9eee8;
+  color: #647b67;
+}
+
+.cover-image {
+  background: #e7ecee;
+  color: #5f7680;
+}
+
+.cover-document {
+  background: #ece9e4;
+  color: #73695e;
+}
 
 .file-mark {
   font-family: Georgia, 'Times New Roman', serif;
@@ -800,34 +801,13 @@ button {
   color: var(--learning-primary);
 }
 
-.materials-page .cover-pdf {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-
-.materials-page .cover-slides {
-  background: #fdf6ec;
-  color: #e6a23c;
-}
-
-.materials-page .cover-word {
-  background: #ecf5ff;
-  color: #409eff;
-}
-
-.materials-page .cover-note {
-  background: #f0f9eb;
-  color: #67c23a;
-}
-
-.materials-page .cover-image {
-  background: #f4f4f5;
-  color: #909399;
-}
-
+.materials-page .cover-pdf,
+.materials-page .cover-slides,
+.materials-page .cover-note,
+.materials-page .cover-image,
 .materials-page .cover-document {
-  background: #f4f4f5;
-  color: #606266;
+  background: #eaf2ff;
+  color: var(--learning-primary);
 }
 
 .materials-page .material-subject {

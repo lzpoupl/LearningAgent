@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
+import type { UploadImageRequest, UploadedImage } from '../types/assets'
 import type {
   Card,
   CardGrade,
@@ -7,6 +8,7 @@ import type {
   CardSearch,
   Deck,
   NewCard,
+  ReviewOption,
   ReviewOutcome,
   UpdateCardContent,
 } from '../types/anki'
@@ -53,6 +55,10 @@ export function gradeCard(cardId: string, grade: CardGrade): Promise<ReviewOutco
   return invoke<ReviewOutcome>('anki_grade_card', { cardId, grade })
 }
 
+export function getReviewOptions(cardId: string): Promise<ReviewOption[]> {
+  return invoke<ReviewOption[]>('anki_get_review_options', { cardId })
+}
+
 export function resetCard(cardId: string): Promise<ReviewOutcome> {
   return invoke<ReviewOutcome>('anki_reset_card', { cardId })
 }
@@ -67,4 +73,8 @@ export function deleteDeck(deckPath: string): Promise<void> {
 
 export function deleteCard(cardId: string): Promise<void> {
   return invoke<void>('anki_delete_card', { cardId })
+}
+
+export function uploadImage(input: UploadImageRequest): Promise<UploadedImage> {
+  return invoke<UploadedImage>('anki_upload_image', { input })
 }

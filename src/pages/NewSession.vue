@@ -9,13 +9,13 @@
       <el-card class="start-card" shadow="never">
         <el-form label-position="top" @submit.prevent="startChat">
           <el-form-item label="学习助手">
-            <el-select v-model="selectedAgent" class="agent-select" placeholder="选择学习助手">
-              <el-option
-                v-for="agent in agentCatalog"
-                :key="agent.id"
-                :label="agent.name"
-                :value="agent.id"
-              >
+            <el-select
+              v-model="selectedAgent"
+              class="agent-select"
+              :disabled="loadingAgents || agents.length === 0"
+              placeholder="选择学习助手"
+            >
+              <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
                 <div class="agent-option">
                   <el-avatar :size="28" :style="{ background: agent.color }">
                     {{ agent.icon }}
@@ -27,26 +27,21 @@
                 </div>
               </el-option>
             </el-select>
+            <span v-if="agentError" class="field-error" role="alert">{{ agentError }}</span>
           </el-form-item>
 
           <el-form-item label="学习问题">
-            <el-input
-              v-model="question"
-              :rows="5"
-              maxlength="2000"
-              placeholder="输入你想学习的问题..."
-              resize="none"
-              show-word-limit
-              type="textarea"
-              @keydown.enter.exact.prevent="startChat"
-            />
+            <el-input v-model="question" :rows="5" maxlength="2000" placeholder="输入你想学习的问题..." resize="none"
+              show-word-limit type="textarea" @keydown.enter.exact.prevent="startChat" />
           </el-form-item>
 
           <div class="form-footer">
             <span>Agent 会结合已启用的学习资料回答</span>
-            <el-button :disabled="!question.trim()" native-type="submit" type="primary">
+            <el-button :disabled="!question.trim() || !selectedAgent || loadingAgents" native-type="submit" type="primary">
               开始学习
-              <el-icon><ArrowRight /></el-icon>
+              <el-icon>
+                <ArrowRight />
+              </el-icon>
             </el-button>
           </div>
         </el-form>
@@ -58,11 +53,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 
-import { agentCatalog } from '../data/agents'
-import type { AgentType } from '../types/chat'
+import { listAgents } from '../services/agent'
+import type { AgentInfo, AgentType } from '../types/chat'
 
 const props = defineProps<{
   initialAgent?: AgentType
@@ -72,8 +67,11 @@ const emit = defineEmits<{
   start: [agent: AgentType, question: string]
 }>()
 
-const selectedAgent = ref<AgentType>(props.initialAgent ?? 'math')
+const agents = ref<AgentInfo[]>([])
+const selectedAgent = ref<AgentType>(props.initialAgent ?? '')
 const question = ref('')
+const loadingAgents = ref(false)
+const agentError = ref('')
 
 watch(
   () => props.initialAgent,
@@ -84,15 +82,34 @@ watch(
   },
 )
 
+async function loadAgents() {
+  loadingAgents.value = true
+  agentError.value = ''
+
+  try {
+    agents.value = (await listAgents()).filter(agent => agent.enabled)
+    if (!selectedAgent.value || !agents.value.some(agent => agent.id === selectedAgent.value)) {
+      selectedAgent.value = agents.value[0]?.id ?? ''
+    }
+  } catch (error) {
+    console.error(error)
+    agentError.value = '学习助手加载失败，请稍后重试。'
+  } finally {
+    loadingAgents.value = false
+  }
+}
+
 function startChat() {
   const content = question.value.trim()
 
-  if (!content) {
+  if (!content || !selectedAgent.value) {
     return
   }
 
   emit('start', selectedAgent.value, content)
 }
+
+onMounted(loadAgents)
 </script>
 
 <style scoped>
@@ -173,13 +190,20 @@ h1 {
   width: 100%;
 }
 
+.field-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--el-color-danger);
+  font-size: 11px;
+}
+
 .agent-option {
   display: flex;
   align-items: center;
   gap: 9px;
 }
 
-.agent-option > div {
+.agent-option>div {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -202,7 +226,7 @@ h1 {
   gap: 16px;
 }
 
-.form-footer > span {
+.form-footer>span {
   color: var(--learning-text-muted);
   font-size: 10px;
 }

@@ -1,11 +1,14 @@
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-import { sendMessage as requestMessage } from '../services/api'
-import type {
-  AgentType,
-  ChatMessage,
-  ChatSession,
-} from '../types/chat'
+import {
+  createSession as requestCreateSession,
+  deleteSession as requestDeleteSession,
+  getSession as requestGetSession,
+  listSessions,
+  renameSession as requestRenameSession,
+  sendMessage as requestMessage,
+} from '../services/api'
+import type { AgentType, ChatMessage, ChatSession } from '../types/chat'
 
 function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -23,7 +26,7 @@ function createTextMessage(role: ChatMessage['role'], content: string): ChatMess
 export function useChatSessions() {
   const sessions = ref<ChatSession[]>([])
   const currentSessionId = ref('')
-  const currentAgent = ref<AgentType>('math')
+  const currentAgent = ref<AgentType>('')
   const loading = ref(false)
 
   const currentSession = computed(() =>
@@ -45,28 +48,44 @@ export function useChatSessions() {
       session.messages.push(response.message)
     } catch (error) {
       console.error(error)
-      session.messages.push(
-        createTextMessage('assistant', '抱歉，请求失败，请稍后重试。'),
-      )
+      session.messages.push(createTextMessage('assistant', '抱歉，请求失败，请稍后重试。'))
     } finally {
       loading.value = false
     }
   }
 
+  async function loadSessions() {
+    try {
+      const loadedSessions = await listSessions()
+      sessions.value = loadedSessions
+
+      const firstSession = loadedSessions[0]
+      if (firstSession) {
+        currentSessionId.value = firstSession.id
+        currentAgent.value = firstSession.agent
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   async function startSession(agent: AgentType, question: string) {
-    const session: ChatSession = {
-      id: createId('session'),
-      title: question.length > 20 ? `${question.substring(0, 20)}...` : question,
-      agent,
-      createdAt: new Date().toISOString(),
-      messages: [createTextMessage('user', question)],
+    const content = question.trim()
+    if (!agent || !content) {
+      return
     }
 
-    sessions.value.unshift(session)
-    currentSessionId.value = session.id
-    currentAgent.value = agent
-
-    await requestAI(session, question)
+    loading.value = true
+    try {
+      const session = await requestCreateSession({ agent, message: content })
+      sessions.value = [session, ...sessions.value.filter(item => item.id !== session.id)]
+      currentSessionId.value = session.id
+      currentAgent.value = session.agent
+    } catch (error) {
+      console.error(error)
+    } finally {
+      loading.value = false
+    }
   }
 
   async function sendMessage(content: string) {
@@ -81,7 +100,7 @@ export function useChatSessions() {
     await requestAI(session, question)
   }
 
-  function selectSession(sessionId: string) {
+  async function selectSession(sessionId: string) {
     const session = sessions.value.find(item => item.id === sessionId)
 
     if (!session) {
@@ -90,33 +109,61 @@ export function useChatSessions() {
 
     currentSessionId.value = session.id
     currentAgent.value = session.agent
-  }
 
-  function renameSession(sessionId: string, title: string) {
-    const session = sessions.value.find(item => item.id === sessionId)
-
-    if (session && title.trim()) {
-      session.title = title.trim()
+    try {
+      const loadedSession = await requestGetSession(sessionId)
+      const index = sessions.value.findIndex(item => item.id === sessionId)
+      if (index !== -1) {
+        sessions.value[index] = loadedSession
+      }
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  function deleteSession(sessionId: string) {
+  async function renameSession(sessionId: string, title: string) {
+    const normalizedTitle = title.trim()
+    const session = sessions.value.find(item => item.id === sessionId)
+
+    if (!session || !normalizedTitle) {
+      return
+    }
+
+    try {
+      const updatedSession = await requestRenameSession(sessionId, normalizedTitle)
+      const index = sessions.value.findIndex(item => item.id === sessionId)
+      if (index !== -1) {
+        sessions.value[index] = updatedSession
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function deleteSession(sessionId: string) {
     const index = sessions.value.findIndex(item => item.id === sessionId)
 
     if (index === -1) {
       return
     }
 
-    sessions.value.splice(index, 1)
+    try {
+      await requestDeleteSession(sessionId)
+      sessions.value.splice(index, 1)
 
-    if (currentSessionId.value !== sessionId) {
-      return
+      if (currentSessionId.value !== sessionId) {
+        return
+      }
+
+      const nextSession = sessions.value[0]
+      currentSessionId.value = nextSession?.id ?? ''
+      currentAgent.value = nextSession?.agent ?? ''
+    } catch (error) {
+      console.error(error)
     }
-
-    const nextSession = sessions.value[0]
-    currentSessionId.value = nextSession?.id ?? ''
-    currentAgent.value = nextSession?.agent ?? 'math'
   }
+
+  onMounted(loadSessions)
 
   return {
     sessions,

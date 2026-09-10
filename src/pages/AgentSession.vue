@@ -5,85 +5,71 @@
         <template #header>
           <div class="conversation-header">
             <div class="agent-heading">
-              <el-avatar :size="38" :style="{ background: currentAgentInfo.color }">
+              <el-avatar v-if="currentAgentInfo" :size="38" :style="{ background: currentAgentInfo.color }">
                 {{ currentAgentInfo.icon }}
               </el-avatar>
+              <el-avatar v-else :size="38">?</el-avatar>
               <div>
-                <strong>{{ currentAgentInfo.name }}</strong>
-                <span><i />基于学习资产回答</span>
+                <strong>{{ currentAgentInfo?.name ?? currentAgent }}</strong>
+                <span><i />{{ agentError || '基于学习资产回答' }}</span>
               </div>
             </div>
 
             <el-button plain size="small" @click="emit('new-session')">
-              <el-icon><Plus /></el-icon>
+              <el-icon>
+                <Plus />
+              </el-icon>
               新会话
             </el-button>
           </div>
         </template>
 
         <div ref="messageContainer" class="message-list" aria-live="polite">
-          <el-empty
-            v-if="currentMessages.length === 0"
-            :image-size="72"
-            description="从一个问题开始今天的学习"
-          >
+          <el-empty v-if="currentMessages.length === 0" :image-size="72" description="从一个问题开始今天的学习">
             <el-button type="primary" plain @click="emit('new-session')">
               开始新的学习
             </el-button>
           </el-empty>
 
-          <ChatMessage
-            v-for="message in currentMessages"
-            :key="message.id"
-            :message="message"
-          />
+          <ChatMessage v-for="message in currentMessages" :key="message.id" :message="message" />
 
           <div v-if="loading" class="loading-state">
-            <el-icon class="is-loading"><Loading /></el-icon>
+            <el-icon class="is-loading">
+              <Loading />
+            </el-icon>
             AI 正在整理答案...
           </div>
         </div>
 
         <template #footer>
           <form class="composer" @submit.prevent="send">
-            <el-input
-              v-model="inputMessage"
-              :disabled="loading || !currentSession"
-              :rows="2"
-              maxlength="4000"
-              placeholder="输入你的问题..."
-              resize="none"
-              show-word-limit
-              type="textarea"
-              @keydown.enter.exact.prevent="send"
-            />
-            <el-button
-              class="send-button"
-              circle
-              :disabled="!inputMessage.trim() || loading || !currentSession"
-              native-type="submit"
-              type="primary"
-            >
-              <el-icon><Promotion /></el-icon>
+            <el-input v-model="inputMessage" :disabled="loading || !currentSession" :rows="2" maxlength="4000"
+              placeholder="输入你的问题..." resize="none" show-word-limit type="textarea"
+              @keydown.enter.exact.prevent="send" />
+            <el-button class="send-button" circle :disabled="!inputMessage.trim() || loading || !currentSession"
+              native-type="submit" type="primary">
+              <el-icon>
+                <Promotion />
+              </el-icon>
             </el-button>
           </form>
           <div class="composer-tip">Enter 发送 · Shift + Enter 换行</div>
         </template>
       </el-card>
 
-      <ChatContextPanel :agent="currentAgentInfo" :has-session="Boolean(currentSession)" />
+       <ChatContextPanel v-if="currentAgentInfo" :agent="currentAgentInfo" :has-session="Boolean(currentSession)" />
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Loading, Plus, Promotion } from '@element-plus/icons-vue'
 
-import { getAgentInfo } from '../data/agents'
 import ChatContextPanel from '../components/chat/ChatContextPanel.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
-import type { AgentType, ChatSession } from '../types/chat'
+import { getAgent } from '../services/agent'
+import type { AgentInfo, AgentType, ChatSession } from '../types/chat'
 
 const props = defineProps<{
   currentAgent: AgentType
@@ -99,8 +85,34 @@ const emit = defineEmits<{
 const inputMessage = ref('')
 const messageContainer = ref<HTMLElement | null>(null)
 
-const currentAgentInfo = computed(() => getAgentInfo(props.currentAgent))
+const currentAgentInfo = ref<AgentInfo | null>(null)
 const currentMessages = computed(() => props.currentSession?.messages ?? [])
+const agentError = ref('')
+
+let agentRequestId = 0
+
+async function loadAgent(agentId: AgentType) {
+  if (!agentId) {
+    currentAgentInfo.value = null
+    return
+  }
+
+  const requestId = ++agentRequestId
+  agentError.value = ''
+
+  try {
+    const agent = await getAgent(agentId)
+    if (requestId === agentRequestId) {
+      currentAgentInfo.value = agent
+    }
+  } catch (error) {
+    console.error(error)
+    if (requestId === agentRequestId) {
+      currentAgentInfo.value = null
+      agentError.value = '学习助手信息加载失败'
+    }
+  }
+}
 
 function send() {
   const content = inputMessage.value.trim()
@@ -126,7 +138,11 @@ watch(
   scrollToBottom,
 )
 
-onMounted(scrollToBottom)
+watch(
+  () => props.currentAgent,
+  agent => void loadAgent(agent),
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -192,7 +208,7 @@ onMounted(scrollToBottom)
   gap: 10px;
 }
 
-.agent-heading > div {
+.agent-heading>div {
   display: flex;
   flex-direction: column;
   gap: 3px;

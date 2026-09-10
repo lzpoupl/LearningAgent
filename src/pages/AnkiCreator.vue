@@ -48,7 +48,7 @@
         <div class="field-group">
           <div class="field-header">
             <label class="field-label" for="front">正面 · 先回忆，再翻面</label>
-            <button class="image-button" type="button" :disabled="saving" title="插入图片"
+             <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片"
               @click="openImagePicker('front')">
               ▧ 插入图片
             </button>
@@ -62,7 +62,7 @@
         <div class="field-group">
           <div class="field-header">
             <label class="field-label" for="back">背面 · 答案与关键解释</label>
-            <button class="image-button" type="button" :disabled="saving" title="插入图片" @click="openImagePicker('back')">
+             <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片" @click="openImagePicker('back')">
               ▧ 插入图片
             </button>
           </div>
@@ -79,8 +79,8 @@
           {{ successMessage }}
         </div>
 
-        <button class="save-button" type="submit" :disabled="!canSave || saving">
-          <span>{{ saving ? '正在保存...' : '保存到 Anki' }}</span>
+         <button class="save-button" type="submit" :disabled="!canSave || saving || imageUploading">
+           <span>{{ saving ? '正在保存...' : '保存到 Anki' }}</span>
           <span aria-hidden="true">→</span>
         </button>
       </form>
@@ -113,7 +113,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 
-import { createCard, createDeck, updateCardContent } from '../services/anki'
+import { createCard, createDeck, updateCardContent, uploadImage } from '../services/anki'
 import type { Card, Deck } from '../types/anki'
 import CardContent from '../components/anki/CardContent.vue'
 import { flattenDecks, loadDeckTree } from '../composables/useDeckTree'
@@ -134,6 +134,7 @@ const back = ref(props.editingCard?.back || '')
 const loadingDecks = ref(false)
 const creatingDeck = ref(false)
 const saving = ref(false)
+const imageUploading = ref(false)
 const showCreateDeck = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -178,30 +179,49 @@ function handleImageSelected(field: 'front' | 'back', event: Event) {
       return
     }
 
-    const textarea = field === 'front' ? frontTextarea.value : backTextarea.value
-    const imageMarkdown = `![${file.name}](${reader.result})`
-    const currentContent = field === 'front' ? front.value : back.value
-    const start = textarea?.selectionStart ?? currentContent.length
-    const end = textarea?.selectionEnd ?? currentContent.length
-    const prefix = start > 0 && !currentContent[start - 1].match(/\s/) ? '\n' : ''
-    const suffix = end < currentContent.length && !currentContent[end].match(/\s/) ? '\n' : ''
-    const insertedContent = `${currentContent.slice(0, start)}${prefix}${imageMarkdown}${suffix}${currentContent.slice(end)}`
+    const separatorIndex = reader.result.indexOf(',')
+    const contentBase64 = separatorIndex === -1
+      ? reader.result
+      : reader.result.slice(separatorIndex + 1)
+    imageUploading.value = true
 
-    if (field === 'front') {
-      front.value = insertedContent
-    } else {
-      back.value = insertedContent
+    try {
+      const uploadedImage = await uploadImage({
+        name: file.name,
+        mimeType: file.type,
+        contentBase64,
+      })
+      const textarea = field === 'front' ? frontTextarea.value : backTextarea.value
+      const imageMarkdown = `![${file.name}](${uploadedImage.url})`
+      const currentContent = field === 'front' ? front.value : back.value
+      const start = textarea?.selectionStart ?? currentContent.length
+      const end = textarea?.selectionEnd ?? currentContent.length
+      const prefix = start > 0 && !currentContent[start - 1].match(/\s/) ? '\n' : ''
+      const suffix = end < currentContent.length && !currentContent[end].match(/\s/) ? '\n' : ''
+      const insertedContent = `${currentContent.slice(0, start)}${prefix}${imageMarkdown}${suffix}${currentContent.slice(end)}`
+
+      if (field === 'front') {
+        front.value = insertedContent
+      } else {
+        back.value = insertedContent
+      }
+
+      errorMessage.value = ''
+      await nextTick()
+
+      const cursor = start + prefix.length + imageMarkdown.length + suffix.length
+      textarea?.focus()
+      textarea?.setSelectionRange(cursor, cursor)
+    } catch (error) {
+      console.error(error)
+      errorMessage.value = '图片上传失败，请重试。'
+    } finally {
+      imageUploading.value = false
     }
-
-    errorMessage.value = ''
-    await nextTick()
-
-    const cursor = start + prefix.length + imageMarkdown.length + suffix.length
-    textarea?.focus()
-    textarea?.setSelectionRange(cursor, cursor)
   }
 
   reader.onerror = () => {
+    imageUploading.value = false
     errorMessage.value = '图片读取失败，请重试。'
   }
 

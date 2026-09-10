@@ -6,7 +6,8 @@
       title="用户设置"
     />
 
-    <el-card class="settings-card" shadow="never">
+    <el-card v-loading="loading" class="settings-card" shadow="never">
+      <div v-if="errorMessage" class="settings-error" role="alert">{{ errorMessage }}</div>
       <el-tabs v-model="activeTab" tab-position="left" class="settings-tabs">
         <el-tab-pane label="学习偏好" name="preference">
           <section class="settings-section">
@@ -86,52 +87,86 @@
       </el-tabs>
 
       <div class="settings-footer">
-        <el-button type="primary" @click="saveSettings">保存设置</el-button>
+        <el-button :loading="saving" type="primary" @click="saveSettings">保存设置</el-button>
       </div>
     </el-card>
   </main>
 </template>
 
 <script setup lang="ts">
-import { nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 import PageHeader from '../components/common/PageHeader.vue'
+import { getSettings, updateSettings } from '../services/settings'
+import type { UserSettings } from '../types/settings'
 
 const activeTab = ref('preference')
-const subjects = ref(['数学', '英语', '计算机'])
 const addingSubject = ref(false)
 const newSubject = ref('')
 const subjectInput = ref<{ focus: () => void } | null>(null)
+const loading = ref(false)
+const saving = ref(false)
+const errorMessage = ref('')
 
-const settings = reactive({
-  goal: '考研',
-  dailyHours: 4,
-  reminderTime: '09:00',
+const settings = reactive<UserSettings>({
+  goal: '',
+  dailyHours: 0,
+  reminderTime: '',
   theme: 'light',
+  subjects: [],
   enableSpacedRepetition: true,
   showStatistics: true,
   autoReference: true,
 })
 
+const subjects = computed(() => settings.subjects)
+
 function removeSubject(subject: string) {
-  subjects.value = subjects.value.filter(item => item !== subject)
+  settings.subjects = settings.subjects.filter(item => item !== subject)
 }
 
 function finishAddingSubject() {
   const subject = newSubject.value.trim()
 
   if (subject && !subjects.value.includes(subject)) {
-    subjects.value.push(subject)
+    settings.subjects.push(subject)
   }
 
   newSubject.value = ''
   addingSubject.value = false
 }
 
-function saveSettings() {
-  ElMessage.success('设置已保存')
+async function loadSettings() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    Object.assign(settings, await getSettings())
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '设置加载失败，请稍后重试。'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveSettings() {
+  if (saving.value) {
+    return
+  }
+
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    Object.assign(settings, await updateSettings({ ...settings, subjects: [...settings.subjects] }))
+    ElMessage.success('设置已保存')
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '设置保存失败，请重试。'
+  } finally {
+    saving.value = false
+  }
 }
 
 watch(addingSubject, visible => {
@@ -139,6 +174,8 @@ watch(addingSubject, visible => {
     void nextTick(() => subjectInput.value?.focus())
   }
 })
+
+onMounted(loadSettings)
 </script>
 
 <style scoped>
@@ -154,6 +191,15 @@ watch(addingSubject, visible => {
 .settings-card {
   border-color: var(--learning-border);
   box-shadow: var(--learning-shadow);
+}
+
+.settings-error {
+  margin-bottom: 14px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 .settings-tabs {

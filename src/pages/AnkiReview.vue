@@ -57,21 +57,17 @@
     <footer class="review-footer">
       <button class="edit-button" type="button" :disabled="!currentCard" @click="editCurrentCard">编辑</button>
       <div v-if="currentCard" class="grade-actions" aria-label="复习评分">
-        <button class="grade-button again" type="button" :disabled="grading" @click="gradeCurrentCard('again')">
-          <span class="grade-time">&lt; 10 分</span>
-          <strong>重来</strong>
-        </button>
-        <button class="grade-button hard" type="button" :disabled="grading" @click="gradeCurrentCard('hard')">
-          <span class="grade-time">6.3 个⽉</span>
-          <strong>困难</strong>
-        </button>
-        <button class="grade-button good" type="button" :disabled="grading" @click="gradeCurrentCard('good')">
-          <span class="grade-time">1.7 年</span>
-          <strong>良好</strong>
-        </button>
-        <button class="grade-button easy" type="button" :disabled="grading" @click="gradeCurrentCard('easy')">
-          <span class="grade-time">2.7 年</span>
-          <strong>简单</strong>
+        <button
+          v-for="option in reviewOptions"
+          :key="option.grade"
+          class="grade-button"
+          :class="option.grade"
+          type="button"
+          :disabled="grading"
+          @click="gradeCurrentCard(option.grade)"
+        >
+          <span class="grade-time">{{ option.intervalLabel }}</span>
+          <strong>{{ gradeLabel(option.grade) }}</strong>
         </button>
       </div>
       <button class="more-button" type="button" title="更多操作">更多 ▾</button>
@@ -82,8 +78,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import { getCards, gradeCard } from '../services/anki'
-import type { Card, CardGrade, Deck } from '../types/anki'
+import { getCards, getReviewOptions, gradeCard } from '../services/anki'
+import type { Card, CardGrade, Deck, ReviewOption } from '../types/anki'
 import CardContent from '../components/anki/CardContent.vue'
 import {
   flattenDecks,
@@ -107,6 +103,7 @@ const revealed = ref(false)
 const loading = ref(false)
 const grading = ref(false)
 const errorMessage = ref('')
+const reviewOptions = ref<ReviewOption[]>([])
 
 const currentCard = computed(() => reviewCards.value[currentIndex.value] || null)
 const selectedDeck = computed(() => decks.value.find(deck => deck.path === selectedDeckPath.value) || null)
@@ -162,6 +159,10 @@ async function loadReviewCards(excludedCardId?: string) {
     currentIndex.value = reviewCards.value.length
       ? Math.floor(Math.random() * reviewCards.value.length)
       : 0
+    reviewOptions.value = []
+    if (currentCard.value) {
+      reviewOptions.value = await getReviewOptions(currentCard.value.id)
+    }
     revealed.value = false
     deckMenuOpen.value = false
   } catch (error) {
@@ -192,6 +193,7 @@ async function gradeCurrentCard(grade: CardGrade) {
 
     if (reviewCards.value.length > 0) {
       currentIndex.value = Math.floor(Math.random() * reviewCards.value.length)
+      reviewOptions.value = await getReviewOptions(reviewCards.value[currentIndex.value].id)
     } else {
       await loadReviewCards(gradedCardId)
     }
@@ -208,6 +210,16 @@ function editCurrentCard() {
   if (currentCard.value) {
     emit('edit-card', currentCard.value)
   }
+}
+
+function gradeLabel(grade: CardGrade) {
+  const labels: Record<CardGrade, string> = {
+    again: '重来',
+    hard: '困难',
+    good: '良好',
+    easy: '简单',
+  }
+  return labels[grade]
 }
 
 onMounted(loadDecks)

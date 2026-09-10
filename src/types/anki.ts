@@ -55,6 +55,12 @@ export interface ReviewOutcome {
   dueAt: string | null
 }
 
+export interface ReviewOption {
+  grade: CardGrade
+  intervalLabel: string
+  dueAt: string | null
+}
+
 export interface AnkiError {
   code: string
   message: string

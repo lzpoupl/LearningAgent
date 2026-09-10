@@ -65,7 +65,7 @@ const pageComponents: Record<AppView, Component> = {
 
 const activeView = ref<AppView>('home')
 const transientPage = ref<'new-session' | 'anki-creator' | null>(null)
-const initialAgent = ref<AgentType>('math')
+const initialAgent = ref<AgentType>()
 const editingCard = ref<Card | null>(null)
 const sidebarCollapsed = ref(false)
 
@@ -126,7 +126,7 @@ function navigate(view: AppView) {
   activeView.value = view
 }
 
-function openNewSession(agent: AgentType = 'math') {
+function openNewSession(agent?: AgentType) {
   activeView.value = 'chat'
   initialAgent.value = agent
   editingCard.value = null

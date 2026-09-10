@@ -45,6 +45,8 @@
                 v-model="task.done"
                 class="checkbox"
                 type="checkbox"
+                :disabled="taskUpdating === task.id"
+                @change="toggleTask(task)"
               />
 
               <div class="task-main">
@@ -107,9 +109,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import type { AgentType } from '../types/chat'
-import type { Card } from '../types/anki'
-import { searchCards } from '../services/anki'
+import { listAgents } from '../services/agent'
+import { getTodayOverview, updateStudyTask } from '../services/study'
+import type { AgentInfo, AgentType } from '../types/chat'
+import type { StudyTask, TodayOverview } from '../types/study'
 
 const emit = defineEmits<{
   'start-chat': [agent: AgentType]
@@ -127,79 +130,43 @@ interface QuickAction {
   target?: 'agents' | 'assets'
 }
 
-const quickActions: QuickAction[] = [
-  {
-    icon: '∑',
-    title: '数学学习',
-    description: '题目解析 · 知识点',
-    theme: 'blue',
-    agent: 'math'
-  },
-  {
-    icon: 'A',
-    title: '英语学习',
-    description: '词汇 · 例句 · 口语',
-    theme: 'green',
-    agent: 'english'
-  },
-  {
-    icon: '♙',
-    title: '自定义 Agent',
-    description: '配置你的专属学习助手',
-    theme: 'purple',
-    target: 'agents'
-  },
-  {
-    icon: '▣',
-    title: '添加学习资料',
-    description: 'PDF · 笔记 · 课件',
-    theme: 'orange',
-    target: 'assets'
-  }
-]
-
-interface PlanTask {
-  id: number
-  title: string
-  detail: string
-  minutes: number
-  done: boolean
-}
-
-const tasks = ref<PlanTask[]>([
-  {
-    id: 1,
-    title: '数学：高数习题练习',
-    detail: '极限与导数 · 2/3',
-    minutes: 90,
-    done: true
-  },
-  {
-    id: 2,
-    title: '英语：背单词 + 例句翻译',
-    detail: '考研英语词汇',
-    minutes: 60,
-    done: true
-  },
-  {
-    id: 3,
-    title: '操作系统：阅读课件',
-    detail: '进程管理',
-    minutes: 90,
-    done: false
-  },
-  {
-    id: 4,
-    title: 'Anki 复习',
-    detail: '新卡与到期复习卡片',
-    minutes: 60,
-    done: false
-  }
-])
-
-const cards = ref<Card[]>([])
+const agents = ref<AgentInfo[]>([])
+const tasks = ref<StudyTask[]>([])
+const overview = ref<TodayOverview | null>(null)
 const statsLoading = ref(false)
 const statsError = ref('')
+const taskUpdating = ref('')
+
+const quickActions = computed<QuickAction[]>(() => {
+  const agentActions = agents.value
+    .filter(agent => agent.enabled)
+    .slice(0, 2)
+    .map((agent, index) => ({
+      icon: agent.icon,
+      title: agent.name,
+      description: agent.capabilities.slice(0, 2).join(' · ') || agent.description,
+      theme: index === 0 ? ('blue' as const) : ('green' as const),
+      agent: agent.id,
+    }))
+
+  return [
+    ...agentActions,
+    {
+      icon: '♙',
+      title: '自定义 Agent',
+      description: '配置你的专属学习助手',
+      theme: 'purple',
+      target: 'agents',
+    },
+    {
+      icon: '▣',
+      title: '添加学习资料',
+      description: 'PDF · 笔记 · 课件',
+      theme: 'orange',
+      target: 'assets',
+    },
+  ]
+})
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -224,7 +191,7 @@ const greeting = computed(() => {
 })
 
 const todayLabel = computed(() => {
-  const now = new Date()
+  const now = overview.value?.date ? new Date(overview.value.date) : new Date()
   const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
   return `${now.getMonth() + 1}月${now.getDate()}日 · ${weekdays[now.getDay()]}`
@@ -234,15 +201,8 @@ const doneTaskCount = computed(
   () => tasks.value.filter(task => task.done).length
 )
 
-const totalCardCount = computed(() => cards.value.length)
-
-const dueTodayCount = computed(() => {
-  const deadline = endOfTodayIso()
-
-  return cards.value.filter(
-    card => card.dueAt !== null && card.dueAt <= deadline
-  ).length
-})
+const totalCardCount = computed(() => overview.value?.totalCardCount ?? 0)
+const dueTodayCount = computed(() => overview.value?.dueCardCount ?? 0)
 
 const circleStyle = computed(() => {
   const percent =
@@ -258,16 +218,29 @@ const circleStyle = computed(() => {
   }
 })
 
-function endOfTodayIso(): string {
-  const end = new Date()
-
-  end.setHours(23, 59, 59, 999)
-
-  return end.toISOString()
-}
-
 function taskTime(minutes: number): string {
   return `${(minutes / 60).toFixed(1)}h`
+}
+
+async function toggleTask(task: StudyTask) {
+  const previous = !task.done
+  if (taskUpdating.value) {
+    task.done = previous
+    return
+  }
+
+  taskUpdating.value = task.id
+  statsError.value = ''
+  try {
+    const updatedTask = await updateStudyTask(task.id, task.done)
+    Object.assign(task, updatedTask)
+  } catch (error) {
+    console.error(error)
+    task.done = previous
+    statsError.value = '学习计划更新失败，请重试。'
+  } finally {
+    taskUpdating.value = ''
+  }
 }
 
 function openQuickAction(action: QuickAction) {
@@ -285,10 +258,16 @@ async function loadStats() {
   statsError.value = ''
 
   try {
-    cards.value = await searchCards('', {})
+    const [loadedOverview, loadedAgents] = await Promise.all([
+      getTodayOverview(),
+      listAgents(),
+    ])
+    overview.value = loadedOverview
+    tasks.value = loadedOverview.tasks
+    agents.value = loadedAgents
   } catch (error) {
     console.error(error)
-    statsError.value = '学习统计加载失败，请确认 Anki 服务已连接。'
+    statsError.value = '首页数据加载失败，请稍后重试。'
   } finally {
     statsLoading.value = false
   }

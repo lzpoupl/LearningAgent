@@ -1,4 +1,6 @@
-import type { AgentType, ChatMessage } from '../types/chat'
+import { invoke } from '@tauri-apps/api/core'
+
+import type { AgentType, ChatMessage, ChatSession } from '../types/chat'
 
 export interface ChatRequest {
   agent: AgentType
@@ -6,42 +8,36 @@ export interface ChatRequest {
   sessionId: string
 }
 
+export interface CreateSessionRequest {
+  agent: AgentType
+  message: string
+}
+
 export interface ChatResponse {
   message: ChatMessage
 }
 
-export async function sendMessage(
-  request: ChatRequest
-): Promise<ChatResponse> {
+/** 与 Agent 会话后端保持一一对应的请求封装。 */
+export function listSessions(): Promise<ChatSession[]> {
+  return invoke<ChatSession[]>('chat_list_sessions')
+}
 
-  // TODO:
-  // 后面替换成真实后端 API
+export function getSession(sessionId: string): Promise<ChatSession> {
+  return invoke<ChatSession>('chat_get_session', { sessionId })
+}
 
-  console.log('发送给后端：', request)
+export function createSession(request: CreateSessionRequest): Promise<ChatSession> {
+  return invoke<ChatSession>('chat_create_session', { ...request })
+}
 
-  return {
-    message: {
-      id: Date.now().toString(),
-      role: 'assistant',
-      time: new Date().toISOString(),
-      content: [
-        {
-          type: 'text',
-          content: '让我来帮你分析这个问题。'
-        },
-        {
-          type: 'latex',
-          content: '\\int_0^1 x^2 dx = \\frac{1}{3}'
-        },
-        {
-          type: 'result',
-          title: '计算结果',
-          data: {
-            answer: '1/3',
-            status: 'success'
-          }
-        }
-      ]
-    }
-  }
+export function sendMessage(request: ChatRequest): Promise<ChatResponse> {
+  return invoke<ChatResponse>('chat_send_message', { ...request })
+}
+
+export function renameSession(sessionId: string, title: string): Promise<ChatSession> {
+  return invoke<ChatSession>('chat_rename_session', { sessionId, title })
+}
+
+export function deleteSession(sessionId: string): Promise<void> {
+  return invoke<void>('chat_delete_session', { sessionId })
 }

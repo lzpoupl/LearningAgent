@@ -19,7 +19,9 @@
       <el-button circle plain size="small" title="帮助">
         <el-icon><QuestionFilled /></el-icon>
       </el-button>
-      <el-avatar :size="30">W</el-avatar>
+      <el-avatar v-if="profile" :size="30" :src="profile.avatarUrl" :title="`${profile.displayName} · ${profile.role}`">
+        {{ profile.initials }}
+      </el-avatar>
     </div>
   </div>
 </template>
@@ -27,8 +29,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Bell, QuestionFilled, Search } from '@element-plus/icons-vue'
+import { getCurrentUser } from '../../services/user'
+import type { UserProfile } from '../../types/user'
 
 const searchTerm = ref('')
+const profile = ref<UserProfile | null>(null)
 
 function focusSearch() {
   const input = document.querySelector<HTMLInputElement>('.global-search input')
@@ -44,6 +49,14 @@ function handleShortcut(event: KeyboardEvent) {
 
 onMounted(() => window.addEventListener('keydown', handleShortcut))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
+
+onMounted(async () => {
+  try {
+    profile.value = await getCurrentUser()
+  } catch (error) {
+    console.error(error)
+  }
+})
 </script>
 
 <style scoped>

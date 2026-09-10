@@ -4,7 +4,7 @@
 - 已经安装 Element Icons。页面组件优先使用 `@element-plus/icons-vue` 提供的图标。
 - 已经配置 unplugin-vue-components和unplugin-auto-import。页面组件可以直接使用 Element Plus 组件和 Vue 组合式 API，无需手动导入。
 - 已经安装 KaTeX。页面组件使用 `katex` 渲染公式，使用 `marked` 渲染 Markdown 内容。
-- mocks/ 目录下使用了Tauri提供的mock功能，在开发环境，前端可以直接使用 `services/api.ts` 和 `services/anki.ts` 提供的接口进行开发，把假数据放到 mocks/ 目录下，无需启动后端服务。
+- mocks/ 目录下使用了Tauri提供的mock功能，在开发环境，前端必须使用 `src/services/` 里面接口进行开发，不得在代码中硬编码假数据，而应该放到 mocks/ 目录下。
 
 # 前端页面结构
 
@@ -79,8 +79,12 @@
     - 管理会话列表、当前会话、发送消息、创建、选择、重命名和删除。
 - `src/composables/useDeckTree.ts`
     - 加载牌组树、计算牌组卡片数、展开视图和完整牌组列表。
-- `src/data/agents.ts`
-    - 集中维护内置 Agent 的展示信息和能力标签。
+- `src/services/agent.ts`、`src/services/api.ts`
+    - 提供 Agent 配置、权限与会话的后端请求边界。
+- `src/services/study.ts`、`src/services/settings.ts`、`src/services/assets.ts`、`src/services/user.ts`
+    - 提供首页计划、统计、设置、学习资料和用户信息的后端请求边界。
+- `src/mocks/`
+    - 仅在开发环境拦截服务层的 Tauri 命令并返回内存假数据，页面和 composable 不直接引用 mock 数据。
 - `src/services/api.ts`
     - Agent 会话接口边界。
 - `src/services/anki.ts`

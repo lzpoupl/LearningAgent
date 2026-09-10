@@ -14,46 +14,79 @@
 
     <div class="context-section">
       <span class="context-label">可用学习资产</span>
-      <div class="context-item">
-        <el-icon><Document /></el-icon>
-        <div>
-          <strong>{{ agent.id === 'math' ? '高等数学基础.pdf' : '考研英语词汇.pdf' }}</strong>
-          <span>知识库 · 已启用</span>
+      <div v-if="contextLoading" class="context-state">正在加载学习资产...</div>
+      <div v-else-if="contextError" class="context-state error-state" role="alert">{{ contextError }}</div>
+      <template v-else-if="context?.assets.length">
+        <div v-for="asset in context.assets" :key="asset.id" class="context-item">
+          <el-icon>
+            <Document v-if="asset.type === 'document'" />
+            <Notebook v-else-if="asset.type === 'collection'" />
+            <Collection v-else />
+          </el-icon>
+          <div>
+            <strong>{{ asset.name }}</strong>
+            <span>{{ asset.access }}</span>
+          </div>
         </div>
-      </div>
-      <div class="context-item">
-        <el-icon><Notebook /></el-icon>
-        <div>
-          <strong>{{ agent.id === 'math' ? '数学错题本' : '英语例句本' }}</strong>
-          <span>可读取 / 可写入</span>
-        </div>
-      </div>
-      <div class="context-item">
-        <el-icon><Collection /></el-icon>
-        <div>
-          <strong>{{ agent.id === 'math' ? '数学 Anki' : '英语 Anki' }}</strong>
-          <span>可读取 / 可写入</span>
-        </div>
-      </div>
+      </template>
+      <div v-else class="context-state">暂无可用学习资产</div>
     </div>
 
     <div class="permission-list">
       <span class="context-label">Agent 权限</span>
-      <span><el-icon><Check /></el-icon>读取学习资料</span>
-      <span><el-icon><Check /></el-icon>读取错题</span>
-      <span><el-icon><Check /></el-icon>创建 Anki 卡片</span>
+      <span v-for="permission in context?.permissions ?? []" :key="permission.key" :class="{ disabled: !permission.enabled }">
+        <el-icon><Check v-if="permission.enabled" /><Close v-else /></el-icon>
+        {{ permission.label }}
+      </span>
+      <span v-if="!contextLoading && !context?.permissions.length" class="context-state">暂无权限配置</span>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { Check, Collection, Document, Notebook } from '@element-plus/icons-vue'
-import type { AgentInfo } from '../../types/chat'
+import { ref, watch } from 'vue'
+import { Check, Close, Collection, Document, Notebook } from '@element-plus/icons-vue'
+import { getAgentContext } from '../../services/agent'
+import type { AgentContext, AgentInfo } from '../../types/chat'
 
-defineProps<{
+const props = defineProps<{
   agent: AgentInfo
   hasSession: boolean
 }>()
+
+const context = ref<AgentContext | null>(null)
+const contextLoading = ref(false)
+const contextError = ref('')
+let contextRequestId = 0
+
+async function loadContext(agentId: string) {
+  const requestId = ++contextRequestId
+  contextLoading.value = true
+  contextError.value = ''
+
+  try {
+    const loadedContext = await getAgentContext(agentId)
+    if (requestId === contextRequestId) {
+      context.value = loadedContext
+    }
+  } catch (error) {
+    console.error(error)
+    if (requestId === contextRequestId) {
+      context.value = null
+      contextError.value = '学习上下文加载失败'
+    }
+  } finally {
+    if (requestId === contextRequestId) {
+      contextLoading.value = false
+    }
+  }
+}
+
+watch(
+  () => props.agent.id,
+  agentId => void loadContext(agentId),
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -124,6 +157,16 @@ defineProps<{
   font-size: 9px;
 }
 
+.context-state {
+  color: var(--learning-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.error-state {
+  color: var(--el-color-danger);
+}
+
 .context-item {
   gap: 8px;
   padding: 9px;
@@ -153,6 +196,10 @@ defineProps<{
   gap: 5px;
   color: var(--learning-text-secondary);
   font-size: 10px;
+}
+
+.permission-list > span.disabled {
+  color: var(--learning-text-muted);
 }
 
 .permission-list .el-icon {

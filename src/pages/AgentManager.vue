@@ -1,17 +1,18 @@
 <template>
   <main class="page-frame agents-page">
-    <PageHeader
-      description="创建、配置和管理不同学科的 AI 学习助手"
-      eyebrow="学习助手 / AGENTS"
-      title="Agent 管理"
-    >
+    <PageHeader description="创建、配置和管理不同学科的 AI 学习助手" eyebrow="学习助手 / AGENTS" title="Agent 管理">
       <el-button type="primary" @click="openCreateDialog">
-        <el-icon><Plus /></el-icon>
+        <el-icon>
+          <Plus />
+        </el-icon>
         创建 Agent
       </el-button>
     </PageHeader>
 
-    <el-row :gutter="14">
+    <div v-if="loading" class="state-message">正在加载 Agent...</div>
+    <div v-else-if="errorMessage" class="state-message error-state" role="alert">{{ errorMessage }}</div>
+
+    <el-row v-else :gutter="14">
       <el-col v-for="agent in agents" :key="agent.id" :lg="12" :md="12" :sm="24" :xl="12" :xs="24">
         <el-card class="agent-card" shadow="hover">
           <div class="agent-card-heading">
@@ -20,7 +21,11 @@
               <strong>{{ agent.name }}</strong>
               <span>{{ agent.builtin ? '系统 Agent' : '自定义 Agent' }}</span>
             </div>
-            <el-switch v-model="agent.enabled" :aria-label="`${agent.name}启用状态`" />
+            <el-switch
+              :aria-label="`${agent.name}启用状态`"
+              :model-value="agent.enabled"
+              @change="toggleAgent(agent, $event)"
+            />
           </div>
 
           <p class="agent-description">{{ agent.description }}</p>
@@ -35,6 +40,7 @@
           <div class="agent-card-footer">
             <el-button link type="primary" @click="startAgent(agent)">开始对话</el-button>
             <el-button link @click="editAgent(agent)">配置 Agent</el-button>
+            <el-button v-if="!agent.builtin" link type="danger" @click="removeAgent(agent)">删除</el-button>
           </div>
         </el-card>
       </el-col>
@@ -45,7 +51,7 @@
         <strong>Agent 权限管理</strong>
         <p>按学习资产配置读取、编辑和写入权限。</p>
       </div>
-      <el-button plain @click="permissionDialogVisible = true">权限设置</el-button>
+      <el-button plain :loading="permissionLoading" @click="openPermissionDialog">权限设置</el-button>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="editingAgentId ? '配置 Agent' : '创建 Agent'" width="min(520px, 92vw)">
@@ -76,43 +82,35 @@
             <strong>{{ permission.label }}</strong>
             <span>{{ permission.description }}</span>
           </div>
-          <el-switch v-model="permission.enabled" />
+           <el-switch v-model="permission.enabled" />
         </div>
       </div>
       <template #footer>
-        <el-button type="primary" @click="permissionDialogVisible = false">完成</el-button>
+        <el-button :loading="permissionLoading" type="primary" @click="savePermissions">完成</el-button>
       </template>
     </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 import PageHeader from '../components/common/PageHeader.vue'
-import { agentCatalog } from '../data/agents'
-import type { AgentType } from '../types/chat'
+import {
+  createAgent,
+  deleteAgent,
+  getAgentPermissions,
+  listAgents,
+  setAgentEnabled,
+  updateAgent,
+  updateAgentPermissions,
+} from '../services/agent'
+import type { AgentConfigInput, AgentInfo, AgentPermission, AgentType } from '../types/chat'
 
-interface AgentRecord {
-  id: string
-  name: string
-  subject: string
-  description: string
-  icon: string
-  color: string
-  capabilities: string[]
-  enabled: boolean
-  builtin: boolean
-  agentType?: AgentType
-}
-
-interface AgentForm {
-  name: string
-  subject: string
-  description: string
+interface AgentForm extends Omit<AgentConfigInput, 'capabilities'> {
   capabilities: string
 }
 
@@ -120,32 +118,11 @@ const emit = defineEmits<{
   'start-chat': [agent: AgentType]
 }>()
 
-const agents = ref<AgentRecord[]>([
-  ...agentCatalog.map(agent => ({
-    ...agent,
-    subject: agent.id === 'math' ? '数学' : '英语',
-    enabled: true,
-    builtin: true,
-    agentType: agent.id,
-  })),
-  {
-    id: 'custom-os',
-    name: '操作系统 Agent',
-    subject: '计算机',
-    description: '课程知识、知识点总结和习题解析。',
-    icon: '</>',
-    color: 'linear-gradient(135deg, #397bd9, #2654bd)',
-    capabilities: ['课程知识', '知识点总结'],
-    enabled: true,
-    builtin: false,
-  },
-])
-
-const permissions = ref([
-  { key: 'read-assets', label: '读取学习资料', description: '允许 Agent 检索 PDF、笔记和课件。', enabled: true },
-  { key: 'read-notes', label: '读取错题与笔记', description: '允许 Agent 参考你的结构化学习记录。', enabled: true },
-  { key: 'write-anki', label: '创建 Anki 卡片', description: '允许 Agent 将结论整理为待复习卡片。', enabled: true },
-])
+const agents = ref<AgentInfo[]>([])
+const permissions = ref<AgentPermission[]>([])
+const loading = ref(false)
+const errorMessage = ref('')
+const permissionLoading = ref(false)
 
 const dialogVisible = ref(false)
 const permissionDialogVisible = ref(false)
@@ -178,7 +155,7 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
-function editAgent(agent: AgentRecord) {
+function editAgent(agent: AgentInfo) {
   editingAgentId.value = agent.id
   form.name = agent.name
   form.subject = agent.subject
@@ -206,42 +183,117 @@ async function saveAgent() {
 
   try {
     if (editingAgentId.value) {
-      const agent = agents.value.find(item => item.id === editingAgentId.value)
-      if (agent) {
-        agent.name = form.name.trim()
-        agent.subject = form.subject.trim()
-        agent.description = form.description.trim()
-        agent.capabilities = capabilities
-      }
-      ElMessage.success('Agent 配置已更新')
-    } else {
-      agents.value.push({
-        id: `custom-${Date.now()}`,
+      const updatedAgent = await updateAgent(editingAgentId.value, {
         name: form.name.trim(),
         subject: form.subject.trim(),
         description: form.description.trim(),
-        icon: 'AI',
-        color: 'linear-gradient(135deg, #9a7bea, #6c5ce7)',
         capabilities,
-        enabled: true,
-        builtin: false,
       })
+      const index = agents.value.findIndex(item => item.id === editingAgentId.value)
+      if (index !== -1) {
+        agents.value[index] = updatedAgent
+      }
+      ElMessage.success('Agent 配置已更新')
+    } else {
+      const createdAgent = await createAgent({
+        name: form.name.trim(),
+        subject: form.subject.trim(),
+        description: form.description.trim(),
+        capabilities,
+      })
+      agents.value.push(createdAgent)
       ElMessage.success('自定义 Agent 已创建')
     }
     dialogVisible.value = false
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('Agent 保存失败，请重试。')
   } finally {
     saving.value = false
   }
 }
 
-function startAgent(agent: AgentRecord) {
-  if (agent.agentType && agent.enabled) {
-    emit('start-chat', agent.agentType)
+async function toggleAgent(agent: AgentInfo, value: string | number | boolean) {
+  const enabled = Boolean(value)
+  if (enabled === agent.enabled) {
     return
   }
 
-  ElMessage.info('自定义 Agent 的会话接口将在配置完成后启用')
+  try {
+    const updatedAgent = await setAgentEnabled(agent.id, enabled)
+    Object.assign(agent, updatedAgent)
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('Agent 状态更新失败，请重试。')
+  }
 }
+
+function startAgent(agent: AgentInfo) {
+  if (agent.enabled) {
+    emit('start-chat', agent.id)
+    return
+  }
+
+  ElMessage.info('请先启用这个 Agent。')
+}
+
+async function removeAgent(agent: AgentInfo) {
+  if (agent.builtin || !window.confirm(`确定删除“${agent.name}”吗？`)) {
+    return
+  }
+
+  try {
+    await deleteAgent(agent.id)
+    agents.value = agents.value.filter(item => item.id !== agent.id)
+    ElMessage.success('Agent 已删除')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('Agent 删除失败，请重试。')
+  }
+}
+
+async function openPermissionDialog() {
+  permissionDialogVisible.value = true
+  permissionLoading.value = true
+
+  try {
+    permissions.value = await getAgentPermissions()
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('权限加载失败，请重试。')
+  } finally {
+    permissionLoading.value = false
+  }
+}
+
+async function savePermissions() {
+  permissionLoading.value = true
+  try {
+    permissions.value = await updateAgentPermissions(permissions.value)
+    permissionDialogVisible.value = false
+    ElMessage.success('Agent 权限已更新')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('权限保存失败，请重试。')
+  } finally {
+    permissionLoading.value = false
+  }
+}
+
+async function loadAgents() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    agents.value = await listAgents()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'Agent 加载失败，请稍后重试。'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadAgents)
 </script>
 
 <style scoped>
@@ -347,7 +399,7 @@ function startAgent(agent: AgentRecord) {
   border-bottom: 0;
 }
 
-.permission-row > div {
+.permission-row>div {
   display: flex;
   flex-direction: column;
   gap: 4px;

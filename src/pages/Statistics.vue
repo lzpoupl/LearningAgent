@@ -6,36 +6,38 @@
         <h1>学习统计</h1>
         <p>看看最近的学习节奏，把稳定的投入变成长期的积累。</p>
       </div>
-      <div class="date-label">最近更新 · 今天</div>
-    </header>
+       <div class="date-label">{{ loading ? '正在更新...' : '最近更新 · 今天' }}</div>
+     </header>
+
+    <div v-if="errorMessage" class="load-error" role="alert">{{ errorMessage }}</div>
 
     <section class="summary-grid" aria-label="学习摘要">
       <article class="summary-card featured-card">
         <div class="summary-label">今日学习</div>
-        <div class="summary-value">2<span>小时 35 分</span></div>
-        <div class="summary-foot"><span class="trend-up">↑ 18%</span> 比昨日多学习</div>
+        <div class="summary-value">{{ statistics ? formatDuration(statistics.today.minutes) : '...' }}</div>
+        <div class="summary-foot"><span class="trend-up">↑ {{ statistics?.today.changePercent ?? 0 }}%</span> 比昨日多学习</div>
       </article>
 
       <article class="summary-card">
         <div class="summary-label">本周学习</div>
-        <div class="summary-value">11<span>小时 20 分</span></div>
-        <div class="progress-track" aria-label="本周目标完成 71%"><span style="width: 71%" /></div>
-        <div class="summary-foot">本周目标 16 小时 · 71%</div>
+        <div class="summary-value">{{ statistics ? formatDuration(statistics.week.minutes) : '...' }}</div>
+        <div class="progress-track" :aria-label="`本周目标完成 ${weekProgress}%`"><span :style="{ width: `${weekProgress}%` }" /></div>
+        <div class="summary-foot">本周目标 {{ formatDuration(statistics?.week.targetMinutes ?? 0) }} · {{ weekProgress }}%</div>
       </article>
 
       <article class="summary-card">
         <div class="summary-label">Anki 连续使用</div>
-        <div class="summary-value">12<span>天</span></div>
-        <div class="streak-dots" aria-label="连续使用十二天">
-          <i v-for="day in 12" :key="day" class="streak-dot" />
+        <div class="summary-value">{{ statistics?.streakDays ?? 0 }}<span>天</span></div>
+        <div class="streak-dots" :aria-label="`连续使用${statistics?.streakDays ?? 0}天`">
+          <i v-for="day in statistics?.streakDays ?? 0" :key="day" class="streak-dot" />
         </div>
         <div class="summary-foot">保持今天的复习节奏</div>
       </article>
 
       <article class="summary-card">
         <div class="summary-label">已掌握知识点</div>
-        <div class="summary-value">128<span>个</span></div>
-        <div class="summary-foot"><span class="trend-up">↑ 9</span> 本周新增掌握</div>
+        <div class="summary-value">{{ statistics?.masteredKnowledgePoints ?? 0 }}<span>个</span></div>
+        <div class="summary-foot"><span class="trend-up">↑ {{ statistics?.masteredThisWeek ?? 0 }}</span> 本周新增掌握</div>
       </article>
     </section>
 
@@ -45,21 +47,18 @@
           <span class="panel-kicker">LAST 7 DAYS</span>
           <h2>最近七天每日学习时间</h2>
         </div>
-        <div class="chart-total">合计 <strong>11 小时 20 分</strong></div>
+         <div class="chart-total">合计 <strong>{{ formatDuration(statistics?.week.minutes ?? 0) }}</strong></div>
       </div>
 
       <div class="chart-wrap">
         <div class="y-axis" aria-hidden="true">
-          <span>3h</span>
-          <span>2h</span>
-          <span>1h</span>
-          <span>0</span>
+          <span v-for="label in axisLabels" :key="label">{{ label }}</span>
         </div>
         <div class="bar-chart" aria-label="最近七天每日学习时间柱状图">
           <div v-for="item in weeklyStudy" :key="item.day" class="bar-column">
             <div class="bar-value">{{ item.minutes ? formatMinutes(item.minutes) : '—' }}</div>
             <div class="bar-track">
-              <div class="bar" :class="{ today: item.today }" :style="{ height: `${item.minutes / maxMinutes * 100}%` }" />
+             <div class="bar" :class="{ today: item.today }" :style="{ height: `${item.minutes / maxMinutes * 100}%` }" />
             </div>
             <div class="bar-day">{{ item.day }}</div>
           </div>
@@ -75,57 +74,69 @@
             <h2>学习构成</h2>
           </div>
         </div>
-        <div class="focus-row">
-          <span class="focus-icon math">∑</span>
-          <div class="focus-info"><strong>数学</strong><span>6 小时 10 分</span></div>
-          <div class="focus-meter"><span style="width: 55%" /></div>
-          <b>55%</b>
-        </div>
-        <div class="focus-row">
-          <span class="focus-icon english">A</span>
-          <div class="focus-info"><strong>英语</strong><span>3 小时 35 分</span></div>
-          <div class="focus-meter"><span style="width: 32%" /></div>
-          <b>32%</b>
-        </div>
-        <div class="focus-row">
-          <span class="focus-icon anki">✦</span>
-          <div class="focus-info"><strong>Anki 复习</strong><span>1 小时 35 分</span></div>
-          <div class="focus-meter"><span style="width: 14%" /></div>
-          <b>14%</b>
+         <div v-for="subject in statistics?.subjects ?? []" :key="subject.id" class="focus-row">
+           <span class="focus-icon" :class="subject.theme">{{ subject.icon }}</span>
+           <div class="focus-info"><strong>{{ subject.name }}</strong><span>{{ formatDuration(subject.minutes) }}</span></div>
+           <div class="focus-meter"><span :style="{ width: `${subject.percentage}%` }" /></div>
+           <b>{{ subject.percentage }}%</b>
         </div>
       </article>
 
       <article class="detail-panel insight-panel">
-        <span class="panel-kicker">THIS WEEK</span>
-        <h2>保持这个节奏</h2>
-        <p>你已经连续学习 5 天。平均每天投入 1 小时 37 分，距离本周目标还差 4 小时 40 分。</p>
-        <div class="insight-line"><span>目标完成度</span><strong>71%</strong></div>
-        <div class="progress-track large"><span style="width: 71%" /></div>
+         <span class="panel-kicker">THIS WEEK</span>
+         <h2>{{ statistics?.insight.title ?? '学习洞察' }}</h2>
+         <p>{{ statistics?.insight.description ?? '正在加载本周学习洞察...' }}</p>
+         <div class="insight-line"><span>目标完成度</span><strong>{{ statistics?.insight.progressPercent ?? 0 }}%</strong></div>
+         <div class="progress-track large"><span :style="{ width: `${statistics?.insight.progressPercent ?? 0}%` }" /></div>
       </article>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-const weeklyStudy = [
-  { day: '周三', minutes: 80, today: false },
-  { day: '周四', minutes: 125, today: false },
-  { day: '周五', minutes: 70, today: false },
-  { day: '周六', minutes: 160, today: false },
-  { day: '周日', minutes: 95, today: false },
-  { day: '周一', minutes: 115, today: false },
-  { day: '今天', minutes: 155, today: true },
-]
+import { getStudyStatistics } from '../services/study'
+import type { StudyStatistics } from '../types/study'
 
-const maxMinutes = computed(() => Math.max(...weeklyStudy.map(item => item.minutes)))
+const statistics = ref<StudyStatistics | null>(null)
+const loading = ref(false)
+const errorMessage = ref('')
+
+const weeklyStudy = computed(() => statistics.value?.weeklyStudy ?? [])
+const maxMinutes = computed(() => Math.max(1, ...weeklyStudy.value.map(item => item.minutes)))
+const weekProgress = computed(() => statistics.value?.week.progressPercent ?? 0)
+const axisLabels = computed(() => {
+  const step = Math.max(60, Math.ceil(maxMinutes.value / 3 / 60) * 60)
+  return [step * 3, step * 2, step, 0].map(minutes => minutes ? formatMinutes(minutes) : '0')
+})
+
+function formatDuration(minutes: number) {
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return hours > 0 ? `${hours}小时 ${remainingMinutes}分` : `${remainingMinutes}分`
+}
 
 function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
   return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes}m`
 }
+
+async function loadStatistics() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    statistics.value = await getStudyStatistics()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '学习统计加载失败，请稍后重试。'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadStatistics)
 </script>
 
 <style scoped>
@@ -142,9 +153,20 @@ function formatMinutes(minutes: number) {
 .statistics-header,
 .summary-grid,
 .chart-section,
-.detail-grid {
+.detail-grid,
+.load-error {
   width: min(1220px, 100%);
   margin: 0 auto;
+}
+
+.load-error {
+  margin-bottom: 16px;
+  padding: 9px 11px;
+  border: 1px solid #ecd2c8;
+  border-radius: 6px;
+  background: #fff1ee;
+  color: #a34e3f;
+  font-size: 12px;
 }
 
 .statistics-header {
