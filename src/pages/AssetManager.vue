@@ -39,6 +39,16 @@
           <el-option label="文件大小" value="size" />
         </el-select>
       </div>
+      <div class="material-filters">
+        <el-input v-model="searchKeyword" class="material-search" clearable placeholder="搜索资料名称或格式" aria-label="搜索资料">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select v-model="formatFilter" class="format-select" aria-label="按文件格式筛选" size="small">
+          <el-option v-for="option in formatOptions" :key="option.value" :label="option.label" :value="option.value" />
+        </el-select>
+      </div>
     </section>
 
     <div v-if="uploadError" class="feedback error" role="alert">{{ uploadError }}</div>
@@ -50,23 +60,29 @@
           <span class="file-type">{{ material.typeLabel }}</span>
         </div>
         <div class="material-body">
-          <div class="material-subject">{{ material.subject }}</div>
+          <div class="material-subject" :class="`format-accent-${material.kind}`">{{ material.subject }}</div>
           <h2 :title="material.name">{{ material.name }}</h2>
           <div class="material-meta">
             <span>{{ formatSize(material.size) }}</span>
             <span>添加于 {{ material.addedAt }}</span>
           </div>
           <div class="material-actions">
-            <el-button plain size="small" @click="openMaterial(material)">打开</el-button>
-            <el-button text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">移除</el-button>
+            <el-button class="material-open-button" :class="`format-accent-${material.kind}`" type="primary" text size="small" @click="openMaterial(material)">
+              <el-icon><FolderOpened /></el-icon>
+              打开
+            </el-button>
+            <el-button class="material-remove-button" text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">
+              <el-icon><Delete /></el-icon>
+              删除
+            </el-button>
           </div>
         </div>
       </el-card>
     </section>
 
     <section v-else class="empty-materials">
-      <el-empty :description="materials.length ? '这个学科还没有资料' : '添加第一份学习资料'">
-        <p>{{ materials.length ? '切换其他学科，或添加一份新的资料。' : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
+      <el-empty :description="materials.length ? ((searchKeyword || formatFilter) ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
+        <p>{{ materials.length ? ((searchKeyword || formatFilter) ? '调整搜索关键词或文件格式，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
         <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
       </el-empty>
     </section>
@@ -97,9 +113,9 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Delete, FolderOpened, Plus, Search } from '@element-plus/icons-vue'
 
-type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'document'
+type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'word' | 'document'
 
 type Material = {
   id: string
@@ -122,14 +138,33 @@ const newSubject = ref('')
 const showSubjectDialog = ref(false)
 const uploadError = ref('')
 const sortBy = ref<'updated' | 'name' | 'size'>('updated')
+const searchKeyword = ref('')
+const formatFilter = ref<MaterialKind | ''>('')
 
 const subjectOptions = ['数学', '英语', '操作系统']
 const subjects = computed(() => ['全部', ...subjectOptions.filter(subject => materials.value.some(item => item.subject === subject))])
+const formatOptions: Array<{ label: string; value: MaterialKind | '' }> = [
+  { label: '全部格式', value: '' },
+  { label: 'PDF', value: 'pdf' },
+  { label: 'PPT / PPTX', value: 'slides' },
+  { label: 'Word', value: 'word' },
+  { label: '笔记', value: 'note' },
+  { label: '图片', value: 'image' },
+]
 
 const filteredMaterials = computed(() => {
-  const filtered = selectedSubject.value === '全部'
+  const subjectFiltered = selectedSubject.value === '全部'
     ? materials.value
     : materials.value.filter(material => material.subject === selectedSubject.value)
+  const normalizedKeyword = searchKeyword.value.trim().toLocaleLowerCase()
+  const filtered = subjectFiltered.filter(material => {
+    const matchesFormat = !formatFilter.value || material.kind === formatFilter.value
+    const searchableText = [material.name, material.extension, material.typeLabel, material.subject]
+      .join(' ')
+      .toLocaleLowerCase()
+    const matchesKeyword = !normalizedKeyword || searchableText.includes(normalizedKeyword)
+    return matchesFormat && matchesKeyword
+  })
 
   return [...filtered].sort((left, right) => {
     if (sortBy.value === 'name') {
@@ -237,6 +272,7 @@ function getTypeLabel(name: string) {
   const extension = getExtension(name)
   if (extension === 'PDF') return 'PDF 文档'
   if (extension === 'PPT' || extension === 'PPTX') return '演示文稿'
+  if (extension === 'DOC' || extension === 'DOCX') return 'Word 文档'
   if (extension === 'MD' || extension === 'MARKDOWN' || extension === 'TXT') return '笔记'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return '图片'
   return '文档'
@@ -248,6 +284,7 @@ function getMaterialKind(name: string): MaterialKind {
   if (extension === 'PPT' || extension === 'PPTX') return 'slides'
   if (['MD', 'MARKDOWN', 'TXT'].includes(extension)) return 'note'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return 'image'
+  if (extension === 'DOC' || extension === 'DOCX') return 'word'
   return 'document'
 }
 
@@ -358,15 +395,33 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  flex-wrap: wrap;
   margin-bottom: 18px;
   padding-bottom: 12px;
   border-bottom: 1px solid #e5e1da;
 }
 
 .subject-tabs {
+  flex: 1 1 280px;
+  min-width: 280px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.material-filters {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 8px;
+}
+
+.material-search {
+  width: 220px;
+}
+
+.format-select {
+  width: 130px;
 }
 
 .subject-tab {
@@ -644,6 +699,21 @@ button {
     width: 100%;
   }
 
+  .material-filters {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .material-search {
+    flex: 1 1 180px;
+    width: auto;
+  }
+
+  .format-select {
+    flex: 1 1 130px;
+    width: auto;
+  }
+
   .materials-grid {
     grid-template-columns: 1fr;
   }
@@ -698,13 +768,34 @@ button {
   color: var(--learning-primary);
 }
 
-.materials-page .cover-pdf,
-.materials-page .cover-slides,
-.materials-page .cover-note,
-.materials-page .cover-image,
+.materials-page .cover-pdf {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+
+.materials-page .cover-slides {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+.materials-page .cover-word {
+  background: #ecf5ff;
+  color: #409eff;
+}
+
+.materials-page .cover-note {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+
+.materials-page .cover-image {
+  background: #f4f4f5;
+  color: #909399;
+}
+
 .materials-page .cover-document {
-  background: #eaf2ff;
-  color: var(--learning-primary);
+  background: #f4f4f5;
+  color: #606266;
 }
 
 .materials-page .material-subject {
@@ -731,6 +822,91 @@ button {
 
 .materials-page .empty-materials h2 {
   color: var(--learning-text);
+}
+
+.materials-page .material-actions {
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.materials-page .material-open-button {
+  min-width: 74px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--learning-primary);
+  font-weight: 600;
+}
+
+.materials-page .material-open-button:hover {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.materials-page .material-remove-button {
+  padding-right: 4px;
+  padding-left: 4px;
+  font-weight: 500;
+}
+
+.materials-page .material-remove-button:hover {
+  background: var(--el-color-danger-light-9);
+}
+
+.materials-page .material-open-button:focus-visible,
+.materials-page .material-remove-button:focus-visible {
+  outline: 3px solid rgba(40, 125, 245, 0.2);
+  outline-offset: 2px;
+}
+
+.materials-page .material-subject.format-accent-pdf,
+.materials-page .material-open-button.format-accent-pdf {
+  color: #f56c6c;
+}
+
+.materials-page .material-subject.format-accent-slides,
+.materials-page .material-open-button.format-accent-slides {
+  color: #e6a23c;
+}
+
+.materials-page .material-subject.format-accent-word,
+.materials-page .material-open-button.format-accent-word {
+  color: #409eff;
+}
+
+.materials-page .material-subject.format-accent-note,
+.materials-page .material-open-button.format-accent-note {
+  color: #67c23a;
+}
+
+.materials-page .material-subject.format-accent-image,
+.materials-page .material-open-button.format-accent-image {
+  color: #909399;
+}
+
+.materials-page .material-subject.format-accent-document,
+.materials-page .material-open-button.format-accent-document {
+  color: #606266;
+}
+
+.materials-page .material-open-button.format-accent-pdf:hover {
+  background: #fef0f0;
+}
+
+.materials-page .material-open-button.format-accent-slides:hover {
+  background: #fdf6ec;
+}
+
+.materials-page .material-open-button.format-accent-word:hover {
+  background: #ecf5ff;
+}
+
+.materials-page .material-open-button.format-accent-note:hover {
+  background: #f0f9eb;
+}
+
+.materials-page .material-open-button.format-accent-image:hover,
+.materials-page .material-open-button.format-accent-document:hover {
+  background: #f4f4f5;
 }
 
 .materials-page .feedback {
