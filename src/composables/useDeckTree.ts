@@ -16,7 +16,7 @@ export interface DeckRow {
 }
 
 export async function loadDeckTree(): Promise<DeckNode[]> {
-  const roots = await getSubdecks('')
+  const roots = await getSubdecks('/')
   return Promise.all(roots.map(loadDeckNode))
 }
 

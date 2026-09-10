@@ -99,8 +99,8 @@ impl SchedulingAlgorithm for Sm2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Utc};
     use crate::service::scheduler::SchedulingAlgorithm;
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn print_sm2_grading_results() {
@@ -108,7 +108,12 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
         let mut state = None;
 
-        for grade in [CardGrade::Again, CardGrade::Hard, CardGrade::Good, CardGrade::Easy] {
+        for grade in [
+            CardGrade::Again,
+            CardGrade::Hard,
+            CardGrade::Good,
+            CardGrade::Easy,
+        ] {
             let result = algorithm
                 .review(
                     CardMemory {
@@ -126,6 +131,41 @@ mod tests {
                 serde_json::to_string_pretty(&result.algorithm_state).unwrap()
             );
             state = Some(result.algorithm_state);
+        }
+    }
+
+    #[test]
+    fn print_sm2_card_initial_review() {
+        let algorithm = Sm2;
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
+        let state = serde_json::to_value(Sm2State {
+            repetitions: 0,
+            ease_factor: 2.5,
+            interval_days: 0,
+        })
+        .ok();
+
+        for grade in [
+            CardGrade::Again,
+            CardGrade::Hard,
+            CardGrade::Good,
+            CardGrade::Easy,
+        ] {
+            let result = algorithm
+                .review(
+                    CardMemory {
+                        state: CardState::New,
+                        algorithm_state: state.clone(),
+                    },
+                    grade,
+                    now,
+                )
+                .unwrap();
+            println!(
+                "SM-2 initial review grade={:?} due_at={}",
+                grade,
+                result.due_at.to_rfc3339()
+            );
         }
     }
 

@@ -79,6 +79,14 @@ pub fn anki_grade_card(
 }
 
 #[tauri::command]
+pub fn anki_get_review_options(
+    state: tauri::State<'_, AppState>,
+    card_id: String,
+) -> Result<Vec<ReviewOption>, AnkiError> {
+    state.anki.get_review_options(&card_id)
+}
+
+#[tauri::command]
 pub fn anki_reset_card(
     state: tauri::State<'_, AppState>,
     card_id: String,
@@ -124,6 +132,7 @@ macro_rules! anki_handlers {
             crate::controller::anki::anki_move_deck,
             crate::controller::anki::anki_move_card,
             crate::controller::anki::anki_grade_card,
+            crate::controller::anki::anki_get_review_options,
             crate::controller::anki::anki_reset_card,
             crate::controller::anki::anki_update_card_content,
             crate::controller::anki::anki_delete_deck,

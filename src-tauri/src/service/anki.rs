@@ -2,11 +2,11 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use crate::interface::anki::{
-    AnkiError, Card, CardGrade, CardQuery, CardSearch, CardState, Deck, NewCard, ReviewOutcome,
-    UpdateCardContent,
+    AnkiError, Card, CardGrade, CardQuery, CardSearch, CardState, Deck, NewCard, ReviewOption,
+    ReviewOutcome, UpdateCardContent,
 };
 use crate::repository::anki as card_repo;
 use crate::repository::deck as deck_repo;
@@ -149,6 +149,50 @@ impl AnkiService {
         })
     }
 
+    /// 预演四种作答等级，返回每种等级对应的下次复习安排，用于展示复习选项。
+    pub fn get_review_options(&self, card_id: &str) -> Result<Vec<ReviewOption>, AnkiError> {
+        let conn = self.conn()?;
+        let id = Self::parse_id(card_id)?;
+        let schedule =
+            card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
+        let card_repo::ScheduleRecord {
+            state,
+            algorithm,
+            scheduler_state,
+            ..
+        } = schedule;
+
+        let algorithm = self.algorithm_for(&algorithm);
+        let memory_state = Self::parse_algorithm_state(scheduler_state, card_id)?;
+        let now = Utc::now();
+
+        let grades = [
+            CardGrade::Again,
+            CardGrade::Hard,
+            CardGrade::Good,
+            CardGrade::Easy,
+        ];
+
+        let mut options = Vec::with_capacity(grades.len());
+        for grade in grades {
+            let decision = algorithm.review(
+                CardMemory {
+                    state,
+                    algorithm_state: memory_state.clone(),
+                },
+                grade,
+                now,
+            )?;
+            options.push(ReviewOption {
+                grade,
+                interval_label: format_interval(decision.due_at, now),
+                due_at: Some(decision.due_at.to_rfc3339()),
+            });
+        }
+
+        Ok(options)
+    }
+
     /// 彻底忘记某张卡片：恢复到「刚新增」的初始记忆状态。
     pub fn reset_card(&self, card_id: &str) -> Result<ReviewOutcome, AnkiError> {
         let conn = self.conn()?;
@@ -240,6 +284,31 @@ impl AnkiService {
     }
 }
 
+/// 将到期时间格式化为便于展示的时间间隔文案。
+fn format_interval(due_at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    let secs = (due_at - now).num_seconds().max(0);
+    if secs < 60 {
+        return "< 1 分".to_string();
+    }
+    let mins = secs / 60;
+    if mins < 60 {
+        return format!("{mins} 分");
+    }
+    let hours = mins / 60;
+    if hours < 24 {
+        return format!("{hours} 小时");
+    }
+    let days = hours / 24;
+    if days < 30 {
+        return format!("{days} 天");
+    }
+    let months = days / 30;
+    if months < 12 {
+        return format!("{months} 个月");
+    }
+    format!("{} 年", days / 365)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,7 +318,13 @@ mod tests {
     fn setup_service(algorithm: &str) -> (AnkiService, Arc<Mutex<rusqlite::Connection>>, String) {
         let conn = db::open_in_memory().unwrap();
         let deck = deck_repo::create_deck(&conn, "/测试").unwrap();
-        let card_id = card_repo::create_card(&conn, deck_repo::resolve_deck(&conn, &deck).unwrap().unwrap(), "front", "back").unwrap();
+        let card_id = card_repo::create_card(
+            &conn,
+            deck_repo::resolve_deck(&conn, &deck).unwrap().unwrap(),
+            "front",
+            "back",
+        )
+        .unwrap();
         conn.execute(
             "UPDATE card SET algorithm = ?1 WHERE id = ?2",
             rusqlite::params![algorithm, card_id],
@@ -273,9 +348,12 @@ mod tests {
         assert_eq!(second.state, CardState::Review);
 
         let conn = db.lock().unwrap();
-        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap()).unwrap().unwrap();
+        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(schedule.algorithm, "sm2");
-        let state: serde_json::Value = serde_json::from_str(schedule.scheduler_state.as_deref().unwrap()).unwrap();
+        let state: serde_json::Value =
+            serde_json::from_str(schedule.scheduler_state.as_deref().unwrap()).unwrap();
         assert_eq!(state["repetitions"], 2);
         assert!(schedule.due_at.is_some());
     }
@@ -289,9 +367,12 @@ mod tests {
         assert!(outcome.due_at.is_some());
 
         let conn = db.lock().unwrap();
-        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap()).unwrap().unwrap();
+        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(schedule.algorithm, "fsrs");
-        let state: serde_json::Value = serde_json::from_str(schedule.scheduler_state.as_deref().unwrap()).unwrap();
+        let state: serde_json::Value =
+            serde_json::from_str(schedule.scheduler_state.as_deref().unwrap()).unwrap();
         assert!(state["stability"].as_f64().unwrap() > 0.0);
         assert!(state["lastReviewAt"].as_i64().is_some());
     }
@@ -300,13 +381,35 @@ mod tests {
     fn grade_card_reports_boundary_errors() {
         let (service, _, card_id) = setup_service("sm2");
 
-        assert_eq!(service.grade_card("not-an-id", CardGrade::Good).unwrap_err().code, "invalid_id");
-        assert_eq!(service.grade_card("999999", CardGrade::Good).unwrap_err().code, "not_found");
+        assert_eq!(
+            service
+                .grade_card("not-an-id", CardGrade::Good)
+                .unwrap_err()
+                .code,
+            "invalid_id"
+        );
+        assert_eq!(
+            service
+                .grade_card("999999", CardGrade::Good)
+                .unwrap_err()
+                .code,
+            "not_found"
+        );
 
         let conn = service.db.lock().unwrap();
-        conn.execute("UPDATE card SET scheduler_state = ?1 WHERE id = ?2", rusqlite::params!["{broken", card_id.parse::<i64>().unwrap()]).unwrap();
+        conn.execute(
+            "UPDATE card SET scheduler_state = ?1 WHERE id = ?2",
+            rusqlite::params!["{broken", card_id.parse::<i64>().unwrap()],
+        )
+        .unwrap();
         drop(conn);
-        assert_eq!(service.grade_card(&card_id, CardGrade::Good).unwrap_err().code, "invalid_state");
+        assert_eq!(
+            service
+                .grade_card(&card_id, CardGrade::Good)
+                .unwrap_err()
+                .code,
+            "invalid_state"
+        );
     }
 
     #[test]
@@ -319,7 +422,9 @@ mod tests {
         assert!(outcome.due_at.is_none());
 
         let conn = db.lock().unwrap();
-        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap()).unwrap().unwrap();
+        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(schedule.state, CardState::New);
         assert!(schedule.due_at.is_none());
         assert!(schedule.scheduler_state.is_some());

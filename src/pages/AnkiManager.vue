@@ -7,8 +7,8 @@
         <p>按牌组整理、检索和维护你的记忆卡片。</p>
       </div>
       <div class="header-actions">
-        <button class="outline-button" type="button" @click="$emit('create-card')">＋ 新建卡片</button>
-        <button class="dark-button" type="button" @click="showCreateDeck = true">＋ 新建牌组</button>
+        <el-button :icon="Plus" @click="$emit('create-card')">新建卡片</el-button>
+        <el-button type="primary" :icon="Plus" @click="showCreateDeck = true">新建牌组</el-button>
       </div>
     </header>
 
@@ -23,31 +23,29 @@
         </div>
 
         <div v-if="loading" class="state-message">正在加载牌组...</div>
-        <div v-else-if="deckRows.length === 0" class="state-message empty-state">
+        <div v-else-if="deckTree.length === 0" class="state-message empty-state">
           <strong>还没有牌组</strong>
           <span>创建一个牌组开始整理卡片。</span>
-          <button class="text-button" type="button" @click="showCreateDeck = true">创建牌组 →</button>
+          <el-button link type="primary" @click="showCreateDeck = true">创建牌组 →</el-button>
         </div>
-        <div v-else class="deck-tree" role="tree">
-          <button class="deck-row all-cards-row" type="button" role="treeitem" @click="selectDeck('')">
-            <span class="tree-toggle invisible" aria-hidden="true">›</span>
+        <div v-else class="deck-tree">
+          <el-button class="all-cards-row" :class="{ active: selectedDeckPath === '' }" text
+            @click="selectDeck('')">
             <span class="deck-icon" aria-hidden="true">▦</span>
             <span class="deck-name">全部卡片</span>
             <span class="deck-card-count">{{ totalCardCount }}</span>
-          </button>
-          <button v-for="row in deckRows" :key="row.deck.path" class="deck-row"
-            :class="{ active: selectedDeckPath === row.deck.path, 'drop-target': dropTargetPath === row.deck.path }"
-            :style="{ paddingLeft: `${14 + row.depth * 18}px` }" type="button" role="treeitem" draggable="true"
-            :aria-expanded="row.hasChildren ? row.expanded : undefined"
-            @dragstart="startDeckDrag(row.deck.path, $event)" @dragover.prevent="allowDeckDrop(row.deck.path, $event)"
-            @dragleave="clearDeckDrop" @drop.prevent="dropDeck(row.deck.path, $event)" @dragend="clearDeckDrag"
-            @click="selectAndToggleDeck(row.deck.path)">
-            <span class="tree-toggle" :class="{ invisible: !row.hasChildren }" aria-hidden="true"
-              @click.stop="toggleDeck(row.deck.path)">{{ row.expanded ? '⌄' : '›' }}</span>
-            <span class="deck-icon" aria-hidden="true">▱</span>
-            <span class="deck-name">{{ row.deck.name || row.deck.path }}</span>
-            <span class="deck-card-count">{{ row.cardCount }}</span>
-          </button>
+          </el-button>
+          <el-tree ref="deckTreeRef" class="deck-tree-inner" :data="deckTreeData" node-key="path"
+            :expand-on-click-node="false" highlight-current default-expand-all draggable :allow-drag="allowDeckDrag"
+            :allow-drop="allowDeckDrop" @node-click="handleDeckNodeClick" @node-drop="handleDeckDrop">
+            <template #default="{ data }">
+              <span class="deck-node">
+                <span class="deck-icon" aria-hidden="true">▱</span>
+                <span class="deck-name">{{ data.label }}</span>
+                <span class="deck-card-count">{{ data.cardCount }}</span>
+              </span>
+            </template>
+          </el-tree>
         </div>
       </aside>
 
@@ -58,25 +56,21 @@
             <h2>{{ selectedDeckPath || '全部卡片' }}</h2>
           </div>
           <div v-if="selectedDeckPath" class="toolbar-actions">
-            <button class="danger-outline" type="button" @click="deleteSelectedDeck">删除牌组</button>
+            <el-button type="danger" plain @click="deleteSelectedDeck">删除牌组</el-button>
           </div>
         </div>
 
         <div class="filters">
-          <div class="search-box">
-            <span aria-hidden="true">⌕</span>
-            <input v-model="keyword" type="text" placeholder="搜索正面或背面" @keydown.enter="loadCards" />
-            <button v-if="keyword" type="button" title="清除搜索" @click="clearSearch">×</button>
-          </div>
-          <select v-model="stateFilter" aria-label="卡片状态" @change="loadCards">
-            <option value="">全部状态</option>
-            <option value="new">新卡</option>
-            <option value="learning">学习中</option>
-            <option value="review">复习中</option>
-            <option value="relearning">重新学习</option>
-          </select>
-          <button class="outline-button filter-button" type="button" :disabled="loadingCards"
-            @click="loadCards">查询</button>
+          <el-input v-model="keyword" class="search-input" :prefix-icon="Search" placeholder="搜索正面或背面" clearable
+            @keydown.enter="loadCards" @clear="loadCards" />
+          <el-select v-model="stateFilter" class="state-select" aria-label="卡片状态" @change="loadCards">
+            <el-option label="全部状态" value="" />
+            <el-option label="新卡" value="new" />
+            <el-option label="学习中" value="learning" />
+            <el-option label="复习中" value="review" />
+            <el-option label="重新学习" value="relearning" />
+          </el-select>
+          <el-button :loading="loadingCards" @click="loadCards">查询</el-button>
         </div>
 
         <div v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</div>
@@ -96,18 +90,18 @@
               <span class="state-badge" :class="`state-${card.state}`">{{ stateLabel(card.state) }}</span>
               <span>下次复习：{{ formatDueAt(card.dueAt) }}</span>
               <span class="card-actions">
-                <button type="button" title="编辑卡片" @click.stop="openEditCard(card)">编辑</button>
-                <button type="button" title="移动卡片" @click.stop="openMoveCard(card)">移动</button>
-                <button type="button" title="重置记忆" @click.stop="resetSelectedCard(card)">忘记</button>
-                <button class="delete-text" type="button" title="删除卡片" @click.stop="deleteCardItem(card)">删除</button>
+                <el-button link type="primary" size="small" @click.stop="openEditCard(card)">编辑</el-button>
+                <el-button link type="primary" size="small" @click.stop="openMoveCard(card)">移动</el-button>
+                <el-button link type="info" size="small" @click.stop="resetSelectedCard(card)">忘记</el-button>
+                <el-button link type="danger" size="small" @click.stop="deleteCardItem(card)">删除</el-button>
               </span>
             </div>
             <div class="review-actions">
               <span>复习评分</span>
-              <button type="button" @click.stop="gradeSelectedCard(card, 'again')">重来</button>
-              <button type="button" @click.stop="gradeSelectedCard(card, 'hard')">困难</button>
-              <button type="button" @click.stop="gradeSelectedCard(card, 'good')">良好</button>
-              <button type="button" @click.stop="gradeSelectedCard(card, 'easy')">简单</button>
+              <el-button link type="danger" size="small" @click.stop="gradeSelectedCard(card, 'again')">重来</el-button>
+              <el-button link type="warning" size="small" @click.stop="gradeSelectedCard(card, 'hard')">困难</el-button>
+              <el-button link type="primary" size="small" @click.stop="gradeSelectedCard(card, 'good')">良好</el-button>
+              <el-button link type="success" size="small" @click.stop="gradeSelectedCard(card, 'easy')">简单</el-button>
             </div>
           </article>
         </div>
@@ -121,7 +115,7 @@
             <span class="panel-kicker">CARD PREVIEW</span>
             <h2>卡片预览</h2>
           </div>
-          <button class="close-button" type="button" aria-label="关闭" @click="previewCard = null">×</button>
+          <el-button :icon="Close" circle aria-label="关闭" @click="previewCard = null" />
         </div>
         <div class="preview-meta">
           <span class="state-badge" :class="`state-${previewCard.state}`">{{ stateLabel(previewCard.state) }}</span>
@@ -130,8 +124,8 @@
         </div>
         <CardShow variant="preview" :front="previewCard.front" :back="previewCard.back" />
         <div class="modal-actions">
-          <button class="outline-button" type="button" @click="previewCard = null">关闭</button>
-          <button class="dark-button" type="button" @click="editPreviewCard">编辑卡片</button>
+          <el-button @click="previewCard = null">关闭</el-button>
+          <el-button type="primary" @click="editPreviewCard">编辑卡片</el-button>
         </div>
       </section>
     </div>
@@ -143,15 +137,19 @@
             <span class="panel-kicker">NEW DECK</span>
             <h2>新建牌组</h2>
           </div>
-          <button class="close-button" type="button" aria-label="关闭" @click="showCreateDeck = false">×</button>
+          <el-button :icon="Close" circle aria-label="关闭" @click="showCreateDeck = false" />
         </div>
-        <label class="field-label" for="new-deck-path">牌组路径</label>
-        <input id="new-deck-path" v-model="newDeckPath" autofocus placeholder="例如：数学 / 错题" />
-        <p class="modal-hint">使用 / 创建层级牌组，例如“英语 / 例句”。</p>
+        <label class="field-label" for="new-deck-parent">所属牌组</label>
+        <el-tree-select id="new-deck-parent" v-model="newDeckParent" class="deck-select" :data="deckOptions"
+          node-key="value" check-strictly clearable default-expand-all placeholder="不选择则创建在顶层" />
+        <label class="field-label" for="new-deck-name">牌组名称</label>
+        <el-input id="new-deck-name" v-model="newDeckName" class="deck-name-input" autofocus clearable
+          placeholder="例如：错题" />
+        <p class="modal-hint">新牌组将创建在所选牌组的下一级；留空则创建在顶层。</p>
         <div class="modal-actions">
-          <button class="outline-button" type="button" @click="showCreateDeck = false">取消</button>
-          <button class="dark-button" type="submit" :disabled="!newDeckPath.trim() || actionLoading">{{ actionLoading ?
-            '创建中...' : '创建牌组' }}</button>
+          <el-button @click="showCreateDeck = false">取消</el-button>
+          <el-button type="primary" native-type="submit" :disabled="!newDeckName.trim()"
+            :loading="actionLoading">创建牌组</el-button>
         </div>
       </form>
     </div>
@@ -163,17 +161,15 @@
             <span class="panel-kicker">MOVE CARD</span>
             <h2>移动卡片</h2>
           </div>
-          <button class="close-button" type="button" aria-label="关闭" @click="movingCard = null">×</button>
+          <el-button :icon="Close" circle aria-label="关闭" @click="movingCard = null" />
         </div>
         <label class="field-label" for="move-target">目标牌组</label>
-        <select id="move-target" v-model="moveTargetPath">
-          <option value="" disabled>选择目标牌组</option>
-          <option v-for="deck in allDecks" :key="deck.path" :value="deck.path">{{ deck.path }}</option>
-        </select>
+        <el-tree-select id="move-target" v-model="moveTargetPath" class="deck-select" :data="moveDeckOptions"
+          node-key="value" check-strictly default-expand-all placeholder="选择目标牌组" />
         <div class="modal-actions">
-          <button class="outline-button" type="button" @click="movingCard = null">取消</button>
-          <button class="dark-button" type="submit" :disabled="!moveTargetPath || actionLoading">{{ actionLoading ?
-            '移动中...' : '确认移动' }}</button>
+          <el-button @click="movingCard = null">取消</el-button>
+          <el-button type="primary" native-type="submit" :disabled="!moveTargetPath"
+            :loading="actionLoading">确认移动</el-button>
         </div>
       </form>
     </div>
@@ -182,7 +178,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import type { AllowDragFunction, AllowDropFunction, TreeInstance, TreeNodeData } from 'element-plus'
+import { Close, Plus, Search } from '@element-plus/icons-vue'
 
 import {
   createDeck,
@@ -200,9 +198,7 @@ import type { Card, CardGrade, CardState } from '../types/anki'
 import CardShow from '../components/anki/CardShow.vue'
 import {
   aggregateCardCount,
-  findDeckNode,
   flattenDecks,
-  flattenVisibleDecks,
   getDescendantPaths,
   loadDeckTree,
   type DeckNode,
@@ -213,7 +209,21 @@ const emit = defineEmits<{
   'edit-card': [card: Card]
 }>()
 
+interface DeckOption {
+  value: string
+  label: string
+  children?: DeckOption[]
+}
+
+interface DeckTreeNode {
+  path: string
+  label: string
+  cardCount: number
+  children: DeckTreeNode[]
+}
+
 const deckTree = ref<DeckNode[]>([])
+const deckTreeRef = ref<TreeInstance>()
 const selectedDeckPath = ref('')
 const cards = ref<Card[]>([])
 const keyword = ref('')
@@ -224,17 +234,40 @@ const actionLoading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const showCreateDeck = ref(false)
-const newDeckPath = ref('')
+const newDeckParent = ref<string | undefined>('')
+const newDeckName = ref('')
 const previewCard = ref<Card | null>(null)
 const movingCard = ref<Card | null>(null)
 const moveTargetPath = ref('')
-const draggedDeckPath = ref('')
-const dropTargetPath = ref('')
 
 const allDecks = computed(() => flattenDecks(deckTree.value))
 const deckCount = computed(() => allDecks.value.length)
-const deckRows = computed(() => flattenVisibleDecks(deckTree.value))
 const totalCardCount = computed(() => deckTree.value.reduce((total, node) => total + aggregateCardCount(node), 0))
+const deckTreeData = computed<DeckTreeNode[]>(() => deckTree.value.map(toDeckTreeNode))
+const deckOptions = computed(() => buildDeckOptions(node => node.deck.name || node.deck.path))
+const moveDeckOptions = computed(() => buildDeckOptions(node => node.deck.path))
+
+function toDeckTreeNode(node: DeckNode): DeckTreeNode {
+  return {
+    path: node.deck.path,
+    label: node.deck.name || node.deck.path,
+    cardCount: aggregateCardCount(node),
+    children: node.children.map(toDeckTreeNode),
+  }
+}
+
+function buildDeckOptions(labelOf: (node: DeckNode) => string, nodes: DeckNode[] = deckTree.value): DeckOption[] {
+  return nodes.map(node => ({
+    value: node.deck.path,
+    label: labelOf(node),
+    children: node.children.length > 0 ? buildDeckOptions(labelOf, node.children) : undefined,
+  }))
+}
+
+watch(selectedDeckPath, async path => {
+  await nextTick()
+  deckTreeRef.value?.setCurrentKey(path || null)
+})
 
 async function fetchDeckTree() {
   return loadDeckTree()
@@ -259,6 +292,9 @@ async function reloadDecks() {
   } finally {
     loading.value = false
   }
+
+  await nextTick()
+  deckTreeRef.value?.setCurrentKey(selectedDeckPath.value || null)
 }
 
 async function selectDeck(deckPath: string) {
@@ -268,80 +304,35 @@ async function selectDeck(deckPath: string) {
   await loadCards()
 }
 
-async function selectAndToggleDeck(deckPath: string) {
-  const node = findDeckNode(deckTree.value, deckPath)
-  if (!node?.children.length) {
-    await selectDeck(deckPath)
-    return
-  }
-
-  if (node.expanded) {
-    node.expanded = false
-
-    if (selectedDeckPath.value === deckPath || selectedDeckPath.value.startsWith(`${deckPath}/`)) {
-      selectedDeckPath.value = ''
-      keyword.value = ''
-      stateFilter.value = ''
-      await loadCards()
-    }
-
-    return
-  }
-
-  node.expanded = true
-  await selectDeck(deckPath)
+function handleDeckNodeClick(data: TreeNodeData) {
+  void selectDeck(data.path)
 }
 
-function toggleDeck(deckPath: string) {
-  const node = findDeckNode(deckTree.value, deckPath)
-  if (node) {
-    node.expanded = !node.expanded
-  }
-}
+const allowDeckDrag: AllowDragFunction = node => Boolean(node.data.path)
 
-function startDeckDrag(deckPath: string, event: DragEvent) {
-  draggedDeckPath.value = deckPath
-  dropTargetPath.value = ''
-  event.dataTransfer?.setData('text/plain', deckPath)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-  }
-}
-
-function allowDeckDrop(deckPath: string, event: DragEvent) {
-  if (!draggedDeckPath.value || !canMoveDeckInto(draggedDeckPath.value, deckPath)) {
-    return
+const allowDeckDrop: AllowDropFunction = (draggingNode, dropNode, type) => {
+  if (type !== 'inner') {
+    return false
   }
 
-  dropTargetPath.value = deckPath
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
-  }
+  return canMoveDeckInto(draggingNode.data.path, dropNode.data.path)
 }
 
-function clearDeckDrop() {
-  dropTargetPath.value = ''
-}
-
-function clearDeckDrag() {
-  draggedDeckPath.value = ''
-  dropTargetPath.value = ''
+function handleDeckDrop(draggingNode: { data: TreeNodeData }, dropNode: { data: TreeNodeData }) {
+  void moveDeckTo(draggingNode.data.path, dropNode.data.path)
 }
 
 function canMoveDeckInto(sourcePath: string, targetParentPath: string) {
   return sourcePath !== targetParentPath && !targetParentPath.startsWith(`${sourcePath}/`)
 }
 
-async function dropDeck(targetParentPath: string, event: DragEvent) {
-  const sourcePath = draggedDeckPath.value || event.dataTransfer?.getData('text/plain') || ''
-  clearDeckDrag()
-
+async function moveDeckTo(sourcePath: string, targetParentPath: string) {
   if (!sourcePath || !canMoveDeckInto(sourcePath, targetParentPath) || actionLoading.value) {
     return
   }
 
   const sourceName = sourcePath.split('/').pop() || sourcePath
-  const targetPath = `${targetParentPath}/${sourceName}`
+  const targetPath = targetParentPath ? `${targetParentPath}/${sourceName}` : sourceName
 
   if (targetPath === sourcePath) {
     return
@@ -409,11 +400,6 @@ async function loadCards() {
   }
 }
 
-function clearSearch() {
-  keyword.value = ''
-  loadCards()
-}
-
 function openPreview(card: Card) {
   previewCard.value = card
 }
@@ -429,10 +415,12 @@ function editPreviewCard() {
 }
 
 async function createDeckItem() {
-  const path = newDeckPath.value.trim()
-  if (!path || actionLoading.value) {
+  const name = newDeckName.value.trim()
+  if (!name || actionLoading.value) {
     return
   }
+
+  const path = newDeckParent.value ? `${newDeckParent.value}/${name}` : name
 
   actionLoading.value = true
   errorMessage.value = ''
@@ -440,7 +428,8 @@ async function createDeckItem() {
   try {
     await createDeck(path)
     showCreateDeck.value = false
-    newDeckPath.value = ''
+    newDeckName.value = ''
+    newDeckParent.value = ''
     selectedDeckPath.value = path
     successMessage.value = `牌组“${path}”已创建。`
     await reloadDecks()
@@ -644,35 +633,8 @@ textarea {
   font: inherit;
 }
 
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.outline-button,
-.dark-button,
-.danger-outline,
-.text-button {
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.outline-button {
-  padding: 9px 12px;
-  border: 1px solid var(--learning-border);
-  background: var(--learning-surface);
-  color: var(--learning-text-secondary);
-}
-
-.dark-button {
-  padding: 10px 14px;
-  border: 1px solid var(--learning-primary);
-  background: var(--learning-primary);
-  color: #fff;
+.manager-page :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .manager-layout {
@@ -738,65 +700,57 @@ h2 {
   font-size: 14px;
 }
 
-.text-button {
-  width: fit-content;
-  margin-top: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #896f52;
-}
-
 .deck-tree {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.deck-row {
+.deck-tree .all-cards-row {
   width: 100%;
-  min-height: 38px;
+  height: 38px;
+  justify-content: flex-start;
+  margin-bottom: 6px;
+  padding: 0 10px;
+  border-bottom: 1px solid #eeeae4;
+  border-radius: 0;
+  color: #4f4a43;
+  font-size: 13px;
+}
+
+.deck-tree .all-cards-row :deep(.el-button__text) {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #4f4a43;
-  text-align: left;
 }
 
-.deck-row:hover,
-.deck-row.active {
-  background: #eaf2ff;
-}
-
-.deck-row.drop-target {
-  outline: 2px dashed #b08b63;
-  outline-offset: -2px;
-  background: #f6efe6;
-}
-
-.deck-row.active {
+.deck-tree .all-cards-row.active {
   color: var(--learning-primary);
   font-weight: 650;
 }
 
-.all-cards-row {
-  margin-bottom: 6px;
-  border-bottom: 1px solid #eeeae4;
-  border-radius: 0;
+.deck-tree-inner :deep(.el-tree-node__content) {
+  height: 38px;
+  border-radius: 6px;
 }
 
-.tree-toggle {
-  width: 14px;
-  color: #938a7f;
-  font-size: 17px;
-  text-align: center;
+.deck-tree-inner :deep(.el-tree-node__content:hover) {
+  background: #eaf2ff;
 }
 
-.tree-toggle.invisible {
-  visibility: hidden;
+.deck-tree-inner :deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+  font-weight: 650;
+}
+
+.deck-node {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .deck-icon {
@@ -833,69 +787,20 @@ h2 {
   gap: 8px;
 }
 
-.danger-outline {
-  padding: 8px 10px;
-  border: 1px solid #e1c8c0;
-  background: #fff;
-  color: #a65345;
-}
-
 .filters {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.search-box {
-  display: flex;
-  align-items: center;
+.filters .search-input {
   flex: 1;
-  gap: 8px;
   min-width: 0;
-  height: 38px;
-  padding: 0 10px;
-  border: 1px solid #dedbd5;
-  border-radius: 6px;
-  background: #fcfcfb;
-  color: #9a948b;
 }
 
-.search-box input,
-.filters select,
-.modal input,
-.modal select,
-.modal textarea {
-  border: 1px solid #dedbd5;
-  border-radius: 6px;
-  outline: none;
-  background: #fcfcfb;
-  color: #292723;
-  font-size: 13px;
-}
-
-.search-box input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-}
-
-.search-box button {
-  border: 0;
-  background: transparent;
-  color: #8d857c;
-  font-size: 18px;
-}
-
-.filters select,
-.modal input,
-.modal select {
-  height: 38px;
-  padding: 0 10px;
-}
-
-.filter-button {
-  height: 38px;
+.filters .state-select {
+  width: 130px;
+  flex-shrink: 0;
 }
 
 .feedback {
@@ -967,27 +872,16 @@ h2 {
 
 .card-actions {
   display: inline-flex;
-  gap: 9px;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
 }
 
-.card-actions button,
-.review-actions button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #806a51;
-  font-size: 11px;
-}
-
-.card-actions button:hover,
-.review-actions button:hover {
-  color: #332b22;
-  text-decoration: underline;
-}
-
-.card-actions .delete-text {
-  color: #a65345;
+.card-actions :deep(.el-button),
+.review-actions :deep(.el-button) {
+  height: auto;
+  padding: 0 3px;
+  font-size: 12px;
 }
 
 .review-actions {
@@ -1029,31 +923,13 @@ h2 {
   font-size: 12px;
 }
 
-.close-button {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 6px;
-  background: #f1efec;
-  color: #71685f;
-  font-size: 20px;
-}
-
 .modal .field-label {
   margin-top: 22px;
 }
 
-.modal input,
-.modal select,
-.modal textarea {
+.modal .deck-select,
+.modal .deck-name-input {
   width: 100%;
-}
-
-.modal textarea {
-  display: block;
-  padding: 10px;
-  resize: vertical;
-  line-height: 1.55;
 }
 
 .modal-hint {
@@ -1093,7 +969,7 @@ h2 {
     flex-wrap: wrap;
   }
 
-  .search-box {
+  .filters .search-input {
     flex-basis: 100%;
   }
 
@@ -1112,16 +988,8 @@ h2 {
 }
 
 .manager-page .deck-icon,
-.manager-page .card-deck-path,
-.manager-page .text-button,
-.manager-page .card-actions button,
-.manager-page .review-actions button {
+.manager-page .card-deck-path {
   color: var(--learning-primary);
-}
-
-.manager-page .deck-row.drop-target {
-  outline-color: var(--learning-primary);
-  background: #eaf2ff;
 }
 
 .manager-page .card-item {
@@ -1148,14 +1016,9 @@ h2 {
   color: #1677b8;
 }
 
-.manager-page .card-actions .delete-text,
-.manager-page .danger-outline,
-.manager-page .feedback.error {
-  color: var(--el-color-danger);
-}
-
 .manager-page .feedback.error {
   background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
 }
 
 .manager-page .feedback.success {

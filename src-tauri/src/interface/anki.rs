@@ -94,6 +94,15 @@ pub struct ReviewOutcome {
     pub due_at: Option<String>,
 }
 
+/// 复习选项：按当前调度策略预演四种作答等级各自的下次复习安排。
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewOption {
+    pub grade: CardGrade,
+    pub interval_label: String,
+    pub due_at: Option<String>,
+}
+
 /// 接口错误
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

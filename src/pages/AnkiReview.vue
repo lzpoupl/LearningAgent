@@ -12,15 +12,8 @@
             <span aria-hidden="true">⌄</span>
           </button>
           <div v-if="deckMenuOpen" class="deck-menu" role="tree">
-            <button
-              v-for="row in deckRows"
-              :key="row.deck.path"
-              class="deck-option"
-              type="button"
-              role="treeitem"
-              :style="{ paddingLeft: `${10 + row.depth * 17}px` }"
-              @click="selectDeck(row.deck.path)"
-            >
+            <button v-for="row in deckRows" :key="row.deck.path" class="deck-option" type="button" role="treeitem"
+              :style="{ paddingLeft: `${10 + row.depth * 17}px` }" @click="selectDeck(row.deck.path)">
               <span class="deck-option-icon">{{ row.hasChildren ? '▱' : '·' }}</span>
               <span>{{ row.deck.name || row.deck.path }}</span>
               <small>{{ row.cardCount }}</small>
@@ -36,13 +29,8 @@
       <div v-else-if="errorMessage" class="review-message error-message">{{ errorMessage }}</div>
       <template v-else-if="currentCard">
         <div class="card-position">随机复习 · {{ currentIndex + 1 }} / {{ reviewCards.length }}</div>
-        <CardShow
-          variant="review"
-          :front="currentCard.front"
-          :back="currentCard.back"
-          :revealed="revealed"
-          @toggle="revealed = !revealed"
-        />
+        <CardShow variant="review" :front="currentCard.front" :back="currentCard.back" :revealed="revealed"
+          @toggle="revealed = !revealed" />
       </template>
       <div v-else class="review-message">
         <strong>{{ selectedDeckPath ? '今天没有待复习卡片' : '选择一个牌组开始复习' }}</strong>
@@ -53,15 +41,8 @@
     <footer class="review-footer">
       <button class="edit-button" type="button" :disabled="!currentCard" @click="editCurrentCard">编辑</button>
       <div v-if="currentCard" class="grade-actions" aria-label="复习评分">
-        <button
-          v-for="option in reviewOptions"
-          :key="option.grade"
-          class="grade-button"
-          :class="option.grade"
-          type="button"
-          :disabled="grading"
-          @click="gradeCurrentCard(option.grade)"
-        >
+        <button v-for="option in reviewOptions" :key="option.grade" class="grade-button" :class="option.grade"
+          type="button" :disabled="grading" @click="gradeCurrentCard(option.grade)">
           <span class="grade-time">{{ option.intervalLabel }}</span>
           <strong>{{ gradeLabel(option.grade) }}</strong>
         </button>
@@ -136,22 +117,20 @@ async function loadReviewCards(excludedCardId?: string) {
   errorMessage.value = ''
   try {
     const deckPaths = getDescendantPaths(selectedDeckPath.value, deckTree.value)
-    const loadedCards = await Promise.all(deckPaths.map(deckPath => getCards(deckPath, {})))
+    const dueBefore = new Date().toISOString()
+    const loadedCards = await Promise.all(
+      deckPaths.flatMap(deckPath => [
+        getCards(deckPath, { state: 'new' }),
+        getCards(deckPath, { dueBefore }),
+      ]),
+    )
     const cardsById = new Map<string, Card>()
     loadedCards.flat().forEach(card => cardsById.set(card.id, card))
-    const cards = Array.from(cardsById.values())
-    const now = Date.now()
-    reviewCards.value = cards.filter(card => {
-      if (card.id === excludedCardId) {
-        return false
-      }
-
-      if (card.state === 'new') {
-        return false
-      }
-
-      return !card.dueAt || new Date(card.dueAt).getTime() <= now
-    })
+    let cards = Array.from(cardsById.values())
+    if (excludedCardId) {
+      cards = cards.filter(card => card.id !== excludedCardId)
+    }
+    reviewCards.value = cards
     currentIndex.value = reviewCards.value.length
       ? Math.floor(Math.random() * reviewCards.value.length)
       : 0
@@ -396,8 +375,14 @@ h1 {
   font-size: 13px;
 }
 
-.review-message strong { color: #62584d; font-size: 18px; }
-.error-message { color: #a65345; }
+.review-message strong {
+  color: #62584d;
+  font-size: 18px;
+}
+
+.error-message {
+  color: #a65345;
+}
 
 .review-footer {
   display: grid;
@@ -418,7 +403,9 @@ h1 {
   font-size: 11px;
 }
 
-.more-button { justify-self: end; }
+.more-button {
+  justify-self: end;
+}
 
 .grade-actions {
   display: grid;
@@ -440,22 +427,64 @@ h1 {
   cursor: pointer;
 }
 
-.grade-button:hover:not(:disabled) { background: #f0ede8; }
-.grade-button.again { border-bottom: 3px solid #c78368; }
-.grade-button.hard { border-bottom: 3px solid #c2a36c; }
-.grade-button.good { border-bottom: 3px solid #91a17f; }
-.grade-button.easy { border-bottom: 3px solid #789386; }
-.grade-time { color: #9b9187; font-size: 9px; }
-.grade-button strong { font-size: 11px; font-weight: 600; }
+.grade-button:hover:not(:disabled) {
+  background: #f0ede8;
+}
+
+.grade-button.again {
+  border-bottom: 3px solid #c78368;
+}
+
+.grade-button.hard {
+  border-bottom: 3px solid #c2a36c;
+}
+
+.grade-button.good {
+  border-bottom: 3px solid #91a17f;
+}
+
+.grade-button.easy {
+  border-bottom: 3px solid #789386;
+}
+
+.grade-time {
+  color: #9b9187;
+  font-size: 9px;
+}
+
+.grade-button strong {
+  font-size: 11px;
+  font-weight: 600;
+}
 
 @media (max-width: 700px) {
-  .review-header { align-items: flex-start; flex-direction: column; }
-  .review-tools { width: 100%; }
-  .deck-picker { flex: 1; width: auto; }
-  .review-footer { grid-template-columns: 1fr; gap: 10px; }
+  .review-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .review-tools {
+    width: 100%;
+  }
+
+  .deck-picker {
+    flex: 1;
+    width: auto;
+  }
+
+  .review-footer {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
   .edit-button,
-  .more-button { justify-self: stretch; }
-  .grade-actions { grid-template-columns: repeat(2, 1fr); }
+  .more-button {
+    justify-self: stretch;
+  }
+
+  .grade-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .review-page .deck-option-icon,
