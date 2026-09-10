@@ -221,8 +221,8 @@ onMounted(loadDecks)
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #faf9f7;
-  color: #26231f;
+  background: var(--learning-bg);
+  color: var(--learning-text);
 }
 
 .review-header {
@@ -231,12 +231,12 @@ onMounted(loadDecks)
   justify-content: space-between;
   gap: 18px;
   padding: 12px clamp(24px, 6vw, 76px);
-  border-bottom: 1px solid #e7e2da;
-  background: #fff;
+  border-bottom: 1px solid var(--learning-border);
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .eyebrow {
-  color: #8a735a;
+  color: var(--learning-primary);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -260,10 +260,10 @@ h1 {
 .more-button {
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #ded8cf;
+  border: 1px solid var(--learning-border);
   border-radius: 6px;
-  background: #fff;
-  color: #5c5146;
+  background: var(--learning-surface);
+  color: var(--learning-text-secondary);
   cursor: pointer;
   font-size: 12px;
 }
@@ -282,10 +282,10 @@ h1 {
   gap: 8px;
   padding: 0 12px;
   overflow: hidden;
-  border: 1px solid #ded8cf;
+  border: 1px solid var(--learning-border);
   border-radius: 6px;
-  background: #fff;
-  color: #5c5146;
+  background: var(--learning-surface);
+  color: var(--learning-text-secondary);
   cursor: pointer;
   font-size: 12px;
   text-align: left;
@@ -328,8 +328,8 @@ h1 {
 }
 
 .deck-option:hover {
-  background: #f0ede8;
-  color: #715e4b;
+  background: #eaf2ff;
+  color: var(--learning-primary);
 }
 
 .deck-option-icon {
@@ -348,8 +348,19 @@ h1 {
 .tool-button:hover,
 .edit-button:hover,
 .more-button:hover {
-  background: #f0ede8;
-  color: #715e4b;
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.tool-button:focus-visible,
+.edit-button:focus-visible,
+.more-button:focus-visible,
+.deck-picker-button:focus-visible,
+.deck-option:focus-visible,
+.grade-button:focus-visible,
+.review-card:focus-visible {
+  outline: 3px solid rgba(40, 125, 245, 0.25);
+  outline-offset: 2px;
 }
 
 .review-stage {
@@ -532,5 +543,58 @@ h1 {
   .edit-button,
   .more-button { justify-self: stretch; }
   .grade-actions { grid-template-columns: repeat(2, 1fr); }
+}
+
+.review-page .deck-option-icon,
+.review-page .deck-option small,
+.review-page .card-position,
+.review-page .review-message,
+.review-page .grade-time {
+  color: var(--learning-text-muted);
+}
+
+.review-page .review-message strong {
+  color: var(--learning-primary);
+}
+
+.review-page .card-label {
+  color: #8db7f4;
+}
+
+.review-page .review-card {
+  border-color: #1d3557;
+  background: #17233b;
+}
+
+.review-page .card-front {
+  background: #1b2b46;
+}
+
+.review-page .card-back {
+  background: #203653;
+}
+
+.review-page .card-divider {
+  background: #17233b;
+  color: #8fa4c2;
+}
+
+.review-page .card-divider::before {
+  background: #385579;
+}
+
+.review-page .card-divider span {
+  background: #17233b;
+}
+
+.review-page .grade-button:hover:not(:disabled) {
+  background: #eef5ff;
+}
+
+.review-page .grade-button.again,
+.review-page .grade-button.hard,
+.review-page .grade-button.good,
+.review-page .grade-button.easy {
+  border-bottom-color: var(--learning-primary);
 }
 </style>

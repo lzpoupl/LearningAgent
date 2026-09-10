@@ -776,4 +776,161 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.anki-page {
+  background: var(--learning-bg);
+  color: var(--learning-text);
+}
+
+.anki-page .eyebrow,
+.anki-page .panel-kicker {
+  color: var(--learning-primary);
+}
+
+.anki-page .anki-header p {
+  color: var(--learning-text-secondary);
+}
+
+.anki-page .refresh-button,
+.anki-page .icon-button,
+.anki-page .image-button {
+  border-color: var(--learning-border);
+  background: var(--learning-surface);
+  color: var(--learning-text-secondary);
+}
+
+.anki-page .refresh-button:hover,
+.anki-page .icon-button:hover,
+.anki-page .image-button:hover {
+  border-color: #b7d0f8;
+  background: #eef5ff;
+  color: var(--learning-primary);
+}
+
+.anki-page .editor-panel,
+.anki-page .preview-panel {
+  border-color: var(--learning-border);
+}
+
+.anki-page .field-label {
+  color: var(--learning-text);
+}
+
+.anki-page select,
+.anki-page input,
+.anki-page textarea {
+  border-color: var(--learning-border);
+  background: var(--learning-surface);
+  color: var(--learning-text);
+}
+
+.anki-page select:focus,
+.anki-page input:focus,
+.anki-page textarea:focus {
+  border-color: var(--learning-primary);
+  box-shadow: 0 0 0 3px rgba(40, 125, 245, 0.14);
+}
+
+.anki-page .secondary-button {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.anki-page .field-hint {
+  color: var(--learning-text-muted);
+}
+
+.anki-page .feedback.error {
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+
+.anki-page .feedback.success {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
+.anki-page .save-button {
+  background: var(--learning-primary);
+}
+
+.anki-page .preview-panel {
+  background: var(--learning-surface);
+  color: var(--learning-text);
+  box-shadow: var(--learning-shadow);
+}
+
+.anki-page .preview-chip {
+  color: var(--learning-primary);
+}
+
+.anki-page .preview-note,
+.anki-page .card-preview .placeholder {
+  color: var(--learning-text-secondary);
+}
+
+.anki-page .card-preview {
+  border-color: #c9dbf8;
+  background: #f8fbff;
+}
+
+.anki-page .card-preview.answer {
+  background: #eef5ff;
+}
+
+.anki-page .preview-label,
+.anki-page .note-mark {
+  color: #8db7f4;
+}
+
+.anki-page .preview-label {
+  color: var(--learning-primary);
+}
+
+.anki-page .markdown-body :deep(.katex) {
+  color: #111827;
+}
+
+.anki-page .markdown-body :deep(h1),
+.anki-page .markdown-body :deep(h2),
+.anki-page .markdown-body :deep(h3),
+.anki-page .markdown-body :deep(strong) {
+  color: var(--learning-text);
+}
+
+.anki-page .markdown-body :deep(em) {
+  color: #376fae;
+}
+
+.anki-page .markdown-body :deep(code) {
+  background: #e4efff;
+  color: #245ea8;
+}
+
+.anki-page .markdown-body :deep(pre) {
+  background: #f1f6fc;
+}
+
+.anki-page .markdown-body :deep(blockquote) {
+  border-left-color: #8db7f4;
+  color: var(--learning-text-secondary);
+}
+
+.anki-page .markdown-body :deep(a) {
+  color: var(--learning-primary);
+}
+
+.anki-page .markdown-body :deep(hr),
+.anki-page .preview-divider::before {
+  border-color: #d9e7f8;
+  background: #d9e7f8;
+}
+
+.anki-page .preview-divider {
+  color: var(--learning-text-muted);
+}
+
+.anki-page .preview-divider span {
+  background: var(--learning-surface);
+}
 </style>

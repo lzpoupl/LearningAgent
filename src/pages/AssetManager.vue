@@ -33,7 +33,7 @@
       </el-tabs>
       <div class="sort-control">
         <span>排序</span>
-        <el-select v-model="sortBy" aria-label="资料排序" size="small">
+        <el-select v-model="sortBy" class="sort-select" aria-label="资料排序" size="small">
           <el-option label="最近添加" value="updated" />
           <el-option label="名称" value="name" />
           <el-option label="文件大小" value="size" />
@@ -393,9 +393,14 @@ button {
 .sort-control {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 8px;
   color: #9a9289;
   font-size: 12px;
+}
+
+.sort-select {
+  width: 160px;
 }
 
 .sort-control select,
@@ -634,8 +639,115 @@ button {
     flex-direction: column;
   }
 
+  .sort-control,
+  .sort-select {
+    width: 100%;
+  }
+
   .materials-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.materials-page {
+  background: var(--learning-bg);
+  color: var(--learning-text);
+}
+
+.materials-page .eyebrow {
+  color: var(--learning-primary);
+}
+
+.materials-page .materials-header p,
+.materials-page .sort-control,
+.materials-page .material-meta,
+.materials-page .empty-materials p,
+.materials-page .selected-files {
+  color: var(--learning-text-secondary);
+}
+
+.materials-page .materials-toolbar {
+  border-bottom-color: var(--learning-border);
+}
+
+.materials-page .subject-tab {
+  color: var(--learning-text-secondary);
+}
+
+.materials-page .subject-tab span {
+  color: var(--learning-text-muted);
+}
+
+.materials-page .subject-tab:hover,
+.materials-page .subject-tab.active {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.materials-page .material-card {
+  border-color: var(--learning-border);
+  box-shadow: var(--learning-shadow);
+}
+
+.materials-page .material-card:hover {
+  box-shadow: 0 10px 24px rgba(40, 125, 245, 0.14);
+}
+
+.materials-page .material-cover {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.materials-page .cover-pdf,
+.materials-page .cover-slides,
+.materials-page .cover-note,
+.materials-page .cover-image,
+.materials-page .cover-document {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.materials-page .material-subject {
+  color: var(--learning-primary);
+}
+
+.materials-page .material-body h2 {
+  color: var(--learning-text);
+}
+
+.materials-page .remove-button {
+  color: var(--el-color-danger);
+}
+
+.materials-page .empty-materials {
+  border-color: #b7d0f8;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.materials-page .empty-icon {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.materials-page .empty-materials h2 {
+  color: var(--learning-text);
+}
+
+.materials-page .feedback {
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+
+.materials-page .modal-backdrop {
+  background: rgba(15, 35, 65, 0.38);
+}
+
+.materials-page .modal {
+  box-shadow: 0 20px 60px rgba(35, 75, 130, 0.2);
+}
+
+.materials-page .close-button {
+  background: #eaf2ff;
+  color: var(--learning-primary);
 }
 </style>

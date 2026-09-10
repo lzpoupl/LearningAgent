@@ -135,8 +135,8 @@ function formatMinutes(minutes: number) {
   height: 100vh;
   overflow-y: auto;
   padding: 42px clamp(20px, 5vw, 70px) 60px;
-  background: #f8f8f6;
-  color: #292723;
+  background: var(--learning-bg);
+  color: var(--learning-text);
 }
 
 .statistics-header,
@@ -157,7 +157,7 @@ function formatMinutes(minutes: number) {
 
 .eyebrow,
 .panel-kicker {
-  color: #8a735a;
+  color: var(--learning-primary);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -179,7 +179,7 @@ h1 {
 
 .statistics-header p {
   margin-top: 10px;
-  color: #77736d;
+  color: var(--learning-text-secondary);
   font-size: 14px;
 }
 
@@ -197,7 +197,7 @@ h1 {
 .summary-card,
 .chart-section,
 .detail-panel {
-  border: 1px solid #e5e1da;
+  border: 1px solid var(--learning-border);
   border-radius: 8px;
   background: #fff;
 }
@@ -208,8 +208,8 @@ h1 {
 }
 
 .featured-card {
-  border-color: #d7c8b5;
-  background: #f4eee6;
+  border-color: #c9dbf8;
+  background: #edf5ff;
 }
 
 .summary-label {
@@ -364,7 +364,7 @@ h2 {
 }
 
 .bar.today {
-  background: #876e54;
+  background: var(--learning-primary);
 }
 
 .bar-day {
@@ -434,7 +434,7 @@ h2 {
 }
 
 .insight-panel {
-  background: #f4eee6;
+  background: #edf5ff;
 }
 
 .insight-panel p {
@@ -453,7 +453,13 @@ h2 {
 }
 
 .insight-line strong {
-  color: #735b42;
+  color: var(--learning-primary);
+}
+
+.summary-card,
+.chart-section,
+.detail-panel {
+  box-shadow: var(--learning-shadow);
 }
 
 .progress-track.large {
@@ -498,5 +504,56 @@ h2 {
     grid-template-columns: 28px 86px minmax(50px, 1fr) 28px;
     gap: 8px;
   }
+}
+
+.statistics-page .date-label,
+.statistics-page .summary-label,
+.statistics-page .summary-foot,
+.statistics-page .chart-total,
+.statistics-page .bar-value,
+.statistics-page .bar-day,
+.statistics-page .focus-info span,
+.statistics-page .focus-row b,
+.statistics-page .insight-line {
+  color: var(--learning-text-muted);
+}
+
+.statistics-page .summary-value,
+.statistics-page .chart-total strong,
+.statistics-page .focus-info strong {
+  color: var(--learning-text);
+}
+
+.statistics-page .progress-track,
+.statistics-page .focus-meter,
+.statistics-page .bar-track {
+  background: #e8eef7;
+}
+
+.statistics-page .progress-track span,
+.statistics-page .focus-meter span,
+.statistics-page .bar,
+.statistics-page .bar.today {
+  background: var(--learning-primary);
+}
+
+.statistics-page .streak-dot {
+  background: #8db7f4;
+}
+
+.statistics-page .trend-up,
+.statistics-page .insight-line strong {
+  color: var(--el-color-success);
+}
+
+.statistics-page .focus-icon.math,
+.statistics-page .focus-icon.anki {
+  background: #eaf2ff;
+  color: var(--learning-primary);
+}
+
+.statistics-page .focus-icon.english {
+  background: #e6f4ff;
+  color: #1677b8;
 }
 </style>

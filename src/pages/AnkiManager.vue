@@ -649,8 +649,8 @@ onMounted(reloadDecks)
   height: 100vh;
   overflow-y: auto;
   padding: 42px clamp(20px, 5vw, 70px) 60px;
-  background: #f8f8f6;
-  color: #292723;
+  background: var(--learning-bg);
+  color: var(--learning-text);
 }
 
 .manager-header,
@@ -669,7 +669,7 @@ onMounted(reloadDecks)
 
 .eyebrow,
 .panel-kicker {
-  color: #8a735a;
+  color: var(--learning-primary);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -691,7 +691,7 @@ h1 {
 
 .manager-header p {
   margin-top: 10px;
-  color: #77736d;
+  color: var(--learning-text-secondary);
   font-size: 14px;
 }
 
@@ -728,15 +728,15 @@ button:disabled {
 
 .outline-button {
   padding: 9px 12px;
-  border: 1px solid #d8d3ca;
-  background: #fff;
-  color: #514b43;
+  border: 1px solid var(--learning-border);
+  background: var(--learning-surface);
+  color: var(--learning-text-secondary);
 }
 
 .dark-button {
   padding: 10px 14px;
-  border: 1px solid #25231f;
-  background: #25231f;
+  border: 1px solid var(--learning-primary);
+  background: var(--learning-primary);
   color: #fff;
 }
 
@@ -750,7 +750,7 @@ button:disabled {
 .deck-panel,
 .cards-panel {
   min-width: 0;
-  border: 1px solid #e5e1da;
+  border: 1px solid var(--learning-border);
   border-radius: 8px;
   background: #fff;
 }
@@ -833,7 +833,7 @@ h2 {
 
 .deck-row:hover,
 .deck-row.active {
-  background: #f0ede8;
+  background: #eaf2ff;
 }
 
 .deck-row.drop-target {
@@ -843,7 +843,7 @@ h2 {
 }
 
 .deck-row.active {
-  color: #2c2925;
+  color: var(--learning-primary);
   font-weight: 650;
 }
 
@@ -1312,5 +1312,74 @@ h2 {
     width: 100%;
     margin-left: 0;
   }
+}
+
+.manager-page .count-label,
+.manager-page .card-meta,
+.manager-page .modal-hint,
+.manager-page .state-message,
+.manager-page .cards-state {
+  color: var(--learning-text-muted);
+}
+
+.manager-page .deck-icon,
+.manager-page .card-deck-path,
+.manager-page .side-label,
+.manager-page .text-button,
+.manager-page .card-actions button,
+.manager-page .review-actions button {
+  color: var(--learning-primary);
+}
+
+.manager-page .deck-row.drop-target {
+  outline-color: var(--learning-primary);
+  background: #eaf2ff;
+}
+
+.manager-page .card-item,
+.manager-page .preview-side {
+  border-color: var(--learning-border);
+}
+
+.manager-page .back-side,
+.manager-page .review-actions,
+.manager-page .preview-side,
+.manager-page .preview-side-back {
+  background: var(--learning-surface-muted);
+}
+
+.manager-page .state-new {
+  background: #eef2f7;
+  color: #64748b;
+}
+
+.manager-page .state-learning,
+.manager-page .state-relearning {
+  background: #eaf2ff;
+  color: #1d64c8;
+}
+
+.manager-page .state-review {
+  background: #e6f4ff;
+  color: #1677b8;
+}
+
+.manager-page .card-actions .delete-text,
+.manager-page .danger-outline,
+.manager-page .feedback.error {
+  color: var(--el-color-danger);
+}
+
+.manager-page .feedback.error {
+  background: var(--el-color-danger-light-9);
+}
+
+.manager-page .feedback.success {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
+.manager-page .modal-backdrop {
+  background: rgba(15, 35, 65, 0.38);
 }
 </style>
