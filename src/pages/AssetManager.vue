@@ -77,8 +77,20 @@
             <span>添加于 {{ material.addedAt }}</span>
           </div>
           <div class="material-actions">
-            <el-button plain size="small" @click="openMaterial(material)">打开</el-button>
-            <el-button text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">移除</el-button>
+            <el-button class="material-open-button" :class="`format-accent-${material.kind}`" type="primary" text
+              size="small" @click="openMaterial(material)">
+              <el-icon>
+                <FolderOpened />
+              </el-icon>
+              打开
+            </el-button>
+            <el-button class="material-remove-button" text type="danger" size="small" title="移除资料"
+              @click="removeMaterial(material.id)">
+              <el-icon>
+                <Delete />
+              </el-icon>
+              删除
+            </el-button>
           </div>
         </div>
       </el-card>
@@ -86,8 +98,8 @@
 
     <section v-else class="empty-materials">
       <el-empty :description="materials.length ? (searchKeyword ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
-        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。' : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT
-        或笔记文件，让学习资料集中在这里。' }}
+        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。'
+          : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}
         </p>
         <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
       </el-empty>
@@ -126,7 +138,7 @@ import type { UploadFile, UploadInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Plus, Search } from '@element-plus/icons-vue'
 
-type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'document'
+type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'word' | 'document'
 
 /** 学科 <-> 物理文件夹 的一一映射 */
 type SubjectFolder = {
@@ -194,9 +206,16 @@ const pendingFolderPath = computed(() => {
 })
 
 const filteredMaterials = computed(() => {
-  const filtered = selectedSubject.value === '全部'
+  const subjectFiltered = selectedSubject.value === '全部'
     ? materials.value
     : materials.value.filter(material => material.subject === selectedSubject.value)
+  const normalizedKeyword = searchKeyword.value.trim().toLocaleLowerCase()
+  const filtered = subjectFiltered.filter(material => {
+    const searchableText = [material.name, material.extension, material.typeLabel, material.subject]
+      .join(' ')
+      .toLocaleLowerCase()
+    return !normalizedKeyword || searchableText.includes(normalizedKeyword)
+  })
 
   return [...filtered].sort((left, right) => {
     if (sortBy.value === 'name') {
@@ -379,6 +398,7 @@ function getTypeLabel(name: string) {
   const extension = getExtension(name)
   if (extension === 'PDF') return 'PDF 文档'
   if (extension === 'PPT' || extension === 'PPTX') return '演示文稿'
+  if (extension === 'DOC' || extension === 'DOCX') return 'Word 文档'
   if (extension === 'MD' || extension === 'MARKDOWN' || extension === 'TXT') return '笔记'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return '图片'
   return '文档'
@@ -390,6 +410,7 @@ function getMaterialKind(name: string): MaterialKind {
   if (extension === 'PPT' || extension === 'PPTX') return 'slides'
   if (['MD', 'MARKDOWN', 'TXT'].includes(extension)) return 'note'
   if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return 'image'
+  if (extension === 'DOC' || extension === 'DOCX') return 'word'
   return 'document'
 }
 
@@ -801,13 +822,34 @@ button {
   color: var(--learning-primary);
 }
 
-.materials-page .cover-pdf,
-.materials-page .cover-slides,
-.materials-page .cover-note,
-.materials-page .cover-image,
+.materials-page .cover-pdf {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+
+.materials-page .cover-slides {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+.materials-page .cover-word {
+  background: #ecf5ff;
+  color: #409eff;
+}
+
+.materials-page .cover-note {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+
+.materials-page .cover-image {
+  background: #f4f4f5;
+  color: #909399;
+}
+
 .materials-page .cover-document {
-  background: #eaf2ff;
-  color: var(--learning-primary);
+  background: #f4f4f5;
+  color: #606266;
 }
 
 .materials-page .material-subject {

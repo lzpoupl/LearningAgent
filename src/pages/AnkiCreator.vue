@@ -30,25 +30,13 @@
               {{ deck.path }} · {{ deck.cardCount }} 张
             </option>
           </select>
-          <button class="icon-button" type="button" title="新建牌组" :disabled="saving || creatingDeck"
-            @click="showCreateDeck = !showCreateDeck">
-            ＋
-          </button>
         </div>
 
-        <div v-if="showCreateDeck" class="create-deck-row">
-          <input v-model="newDeckPath" type="text" placeholder="例如：数学 / 错题" :disabled="creatingDeck"
-            @keydown.enter.prevent="createNewDeck" />
-          <button class="secondary-button" type="button" :disabled="!newDeckPath.trim() || creatingDeck"
-            @click="createNewDeck">
-            {{ creatingDeck ? '创建中' : '创建' }}
-          </button>
-        </div>
 
         <div class="field-group">
           <div class="field-header">
             <label class="field-label" for="front">正面 · 先回忆，再翻面</label>
-             <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片"
+            <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片"
               @click="openImagePicker('front')">
               ▧ 插入图片
             </button>
@@ -56,20 +44,19 @@
           <textarea ref="frontTextarea" id="front" v-model="front" rows="6" placeholder="写一个能独立理解的问题，不要提前泄露答案。" />
           <input ref="frontImageInput" class="hidden-file-input" type="file" accept="image/*"
             @change="handleImageSelected('front', $event)" />
-          <span class="field-hint">{{ front.length }} / 500</span>
         </div>
 
         <div class="field-group">
           <div class="field-header">
             <label class="field-label" for="back">背面 · 答案与关键解释</label>
-             <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片" @click="openImagePicker('back')">
+            <button class="image-button" type="button" :disabled="saving || imageUploading" title="插入图片"
+              @click="openImagePicker('back')">
               ▧ 插入图片
             </button>
           </div>
           <textarea ref="backTextarea" id="back" v-model="back" rows="8" placeholder="先写标准答案，再补充必要的解释、条件或例子。" />
           <input ref="backImageInput" class="hidden-file-input" type="file" accept="image/*"
             @change="handleImageSelected('back', $event)" />
-          <span class="field-hint">{{ back.length }} / 1200</span>
         </div>
 
         <div v-if="errorMessage" class="feedback error" role="alert">
@@ -79,8 +66,8 @@
           {{ successMessage }}
         </div>
 
-         <button class="save-button" type="submit" :disabled="!canSave || saving || imageUploading">
-           <span>{{ saving ? '正在保存...' : '保存到 Anki' }}</span>
+        <button class="save-button" type="submit" :disabled="!canSave || saving || imageUploading">
+          <span>{{ saving ? '正在保存...' : '保存到 Anki' }}</span>
           <span aria-hidden="true">→</span>
         </button>
       </form>
@@ -90,17 +77,13 @@
           <span class="panel-kicker">LIVE PREVIEW</span>
           <span class="preview-chip">{{ selectedDeckPath || '未选择牌组' }}</span>
         </div>
-        <div class="card-preview">
-          <span class="preview-label">正面</span>
-           <CardContent v-if="front.trim()" class="markdown-body" :content="front" />
-          <p v-else class="placeholder">你的问题会显示在这里</p>
-        </div>
-        <div class="preview-divider"><span>翻面后</span></div>
-        <div class="card-preview answer">
-          <span class="preview-label">背面</span>
-           <CardContent v-if="back.trim()" class="markdown-body" :content="back" />
-          <p v-else class="placeholder">答案与解释会显示在这里</p>
-        </div>
+        <CardShow
+          variant="creator"
+          :front="front"
+          :back="back"
+          front-placeholder="你的问题会显示在这里"
+          back-placeholder="答案与解释会显示在这里"
+        />
         <div class="preview-note">
           <span class="note-mark">✦</span>
           <span>一张卡片只测试一个主要记忆点。复杂内容建议拆成多张卡片。</span>
@@ -113,9 +96,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 
-import { createCard, createDeck, updateCardContent, uploadImage } from '../services/anki'
+import { createCard, updateCardContent, uploadImage } from '../services/anki'
 import type { Card, Deck } from '../types/anki'
-import CardContent from '../components/anki/CardContent.vue'
+import CardShow from '../components/anki/CardShow.vue'
 import { flattenDecks, loadDeckTree } from '../composables/useDeckTree'
 
 const props = defineProps<{
@@ -128,14 +111,11 @@ defineEmits<{
 
 const decks = ref<Deck[]>([])
 const selectedDeckPath = ref(props.editingCard?.deckPath || '')
-const newDeckPath = ref('')
 const front = ref(props.editingCard?.front || '')
 const back = ref(props.editingCard?.back || '')
 const loadingDecks = ref(false)
-const creatingDeck = ref(false)
 const saving = ref(false)
 const imageUploading = ref(false)
-const showCreateDeck = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const frontTextarea = ref<HTMLTextAreaElement | null>(null)
@@ -250,31 +230,6 @@ async function loadDecks() {
   }
 }
 
-async function createNewDeck() {
-  const path = newDeckPath.value.trim()
-
-  if (!path || creatingDeck.value) {
-    return
-  }
-
-  creatingDeck.value = true
-  errorMessage.value = ''
-
-  try {
-    await createDeck(path)
-    selectedDeckPath.value = path
-    newDeckPath.value = ''
-    showCreateDeck.value = false
-    successMessage.value = `牌组“${path}”已创建并存入 Anki 数据库。`
-    await loadDecks()
-  } catch (error) {
-    console.error(error)
-    errorMessage.value = '牌组创建失败，请检查牌组路径后重试。'
-  } finally {
-    creatingDeck.value = false
-  }
-}
-
 async function saveCard() {
   if (!canSave.value || saving.value) {
     return
@@ -368,7 +323,6 @@ h1 {
 
 .refresh-button,
 .secondary-button,
-.icon-button,
 .save-button {
   border: 0;
   cursor: pointer;
@@ -414,8 +368,7 @@ h1 {
 
 .panel-heading,
 .preview-topline,
-.deck-row,
-.create-deck-row {
+.deck-row {
   display: flex;
   align-items: center;
 }
@@ -597,177 +550,6 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.card-preview {
-  min-height: 180px;
-  margin-top: 26px;
-  padding: 22px;
-  border: 1px solid #49443b;
-  border-radius: 6px;
-  background: #302e29;
-}
-
-.card-preview.answer {
-  min-height: 210px;
-  margin-top: 0;
-  background: #34312b;
-}
-
-.preview-label {
-  color: #bba487;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.markdown-body {
-  margin-top: 22px;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 19px;
-  line-height: 1.5;
-}
-
-.markdown-body :deep(:first-child) {
-  margin-top: 0;
-}
-
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3) {
-  margin: 0 0 12px;
-  color: #fff8ee;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1.25;
-}
-
-.markdown-body :deep(h1) {
-  font-size: 28px;
-}
-
-.markdown-body :deep(h2) {
-  font-size: 24px;
-}
-
-.markdown-body :deep(h3) {
-  font-size: 21px;
-}
-
-.markdown-body :deep(p) {
-  margin: 0 0 12px;
-}
-
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  margin: 0 0 12px;
-  padding-left: 24px;
-}
-
-.markdown-body :deep(li + li) {
-  margin-top: 5px;
-}
-
-.markdown-body :deep(strong) {
-  color: #fff8ee;
-  font-weight: 700;
-}
-
-.markdown-body :deep(em) {
-  color: #e6d3ba;
-}
-
-.markdown-body :deep(code) {
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: #4a443a;
-  color: #f2d6ae;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 0.82em;
-}
-
-.markdown-body :deep(pre) {
-  overflow-x: auto;
-  margin: 0 0 12px;
-  padding: 12px;
-  border-radius: 5px;
-  background: #201f1c;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 0.78em;
-}
-
-.markdown-body :deep(pre code) {
-  padding: 0;
-  background: transparent;
-}
-
-.markdown-body :deep(blockquote) {
-  margin: 0 0 12px;
-  padding-left: 14px;
-  border-left: 3px solid #bba487;
-  color: #d6c9b9;
-}
-
-.markdown-body :deep(a) {
-  color: #e2ba88;
-  text-decoration: underline;
-}
-
-.markdown-body :deep(img) {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 14px auto;
-  border-radius: 5px;
-}
-
-.markdown-body :deep(hr) {
-  margin: 16px 0;
-  border: 0;
-  border-top: 1px solid #49443b;
-}
-
-.markdown-body :deep(.katex) {
-  color: #fff8ee;
-  font-size: 1em;
-}
-
-.markdown-body :deep(.katex-display) {
-  overflow-x: auto;
-  margin: 18px 0;
-  padding: 8px 0;
-  text-align: center;
-}
-
-.card-preview .placeholder {
-  color: #777168;
-  font-size: 18px;
-}
-
-.preview-divider {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  height: 34px;
-  color: #918878;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.preview-divider::before {
-  position: absolute;
-  top: 16px;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: #49443b;
-  content: '';
-}
-
-.preview-divider span {
-  z-index: 1;
-  padding: 8px 10px;
-  background: #272521;
-}
-
 .preview-note {
   display: flex;
   gap: 9px;
@@ -884,73 +666,11 @@ textarea:focus {
   color: var(--learning-primary);
 }
 
-.anki-page .preview-note,
-.anki-page .card-preview .placeholder {
+.anki-page .preview-note {
   color: var(--learning-text-secondary);
 }
 
-.anki-page .card-preview {
-  border-color: #c9dbf8;
-  background: #f8fbff;
-}
-
-.anki-page .card-preview.answer {
-  background: #eef5ff;
-}
-
-.anki-page .preview-label,
 .anki-page .note-mark {
   color: #8db7f4;
-}
-
-.anki-page .preview-label {
-  color: var(--learning-primary);
-}
-
-.anki-page .markdown-body :deep(.katex) {
-  color: #111827;
-}
-
-.anki-page .markdown-body :deep(h1),
-.anki-page .markdown-body :deep(h2),
-.anki-page .markdown-body :deep(h3),
-.anki-page .markdown-body :deep(strong) {
-  color: var(--learning-text);
-}
-
-.anki-page .markdown-body :deep(em) {
-  color: #376fae;
-}
-
-.anki-page .markdown-body :deep(code) {
-  background: #e4efff;
-  color: #245ea8;
-}
-
-.anki-page .markdown-body :deep(pre) {
-  background: #f1f6fc;
-}
-
-.anki-page .markdown-body :deep(blockquote) {
-  border-left-color: #8db7f4;
-  color: var(--learning-text-secondary);
-}
-
-.anki-page .markdown-body :deep(a) {
-  color: var(--learning-primary);
-}
-
-.anki-page .markdown-body :deep(hr),
-.anki-page .preview-divider::before {
-  border-color: #d9e7f8;
-  background: #d9e7f8;
-}
-
-.anki-page .preview-divider {
-  color: var(--learning-text-muted);
-}
-
-.anki-page .preview-divider span {
-  background: var(--learning-surface);
 }
 </style>

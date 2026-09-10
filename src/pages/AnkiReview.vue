@@ -36,17 +36,13 @@
       <div v-else-if="errorMessage" class="review-message error-message">{{ errorMessage }}</div>
       <template v-else-if="currentCard">
         <div class="card-position">随机复习 · {{ currentIndex + 1 }} / {{ reviewCards.length }}</div>
-        <article class="review-card" :class="{ revealed }" @click="revealed = !revealed">
-          <div class="card-half card-front">
-            <div class="card-label">问题</div>
-             <CardContent class="card-content" :content="currentCard.front" />
-          </div>
-          <div class="card-divider"><span>{{ revealed ? '点击卡片隐藏答案' : '点击卡片查看答案' }}</span></div>
-          <div class="card-half card-back" :class="{ hidden: !revealed }">
-            <div class="card-label">答案</div>
-             <CardContent class="card-content" :content="currentCard.back" />
-          </div>
-        </article>
+        <CardShow
+          variant="review"
+          :front="currentCard.front"
+          :back="currentCard.back"
+          :revealed="revealed"
+          @toggle="revealed = !revealed"
+        />
       </template>
       <div v-else class="review-message">
         <strong>{{ selectedDeckPath ? '今天没有待复习卡片' : '选择一个牌组开始复习' }}</strong>
@@ -80,7 +76,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { getCards, getReviewOptions, gradeCard } from '../services/anki'
 import type { Card, CardGrade, Deck, ReviewOption } from '../types/anki'
-import CardContent from '../components/anki/CardContent.vue'
+import CardShow from '../components/anki/CardShow.vue'
 import {
   flattenDecks,
   flattenDeckRows,
@@ -369,8 +365,7 @@ h1 {
 .more-button:focus-visible,
 .deck-picker-button:focus-visible,
 .deck-option:focus-visible,
-.grade-button:focus-visible,
-.review-card:focus-visible {
+.grade-button:focus-visible {
   outline: 3px solid rgba(40, 125, 245, 0.25);
   outline-offset: 2px;
 }
@@ -385,105 +380,11 @@ h1 {
   padding: 42px 24px 68px;
 }
 
-.review-card {
-  width: min(620px, 76vw);
-  height: min(560px, calc(100vh - 190px));
-  min-height: 420px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  overflow: hidden;
-  border: 1px solid #49443b;
-  border-radius: 10px;
-  background: #272521;
-  box-shadow: 0 16px 42px rgba(49, 41, 32, 0.16);
-  text-align: center;
-}
-
 .card-position {
   position: absolute;
   top: 18px;
   color: #a1978d;
   font-size: 12px;
-}
-
-.card-label {
-  color: #c7a77e;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.card-content {
-  width: 100%;
-  margin-top: 18px;
-  color: #f9f4eb;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(18px, 2.6vw, 29px);
-  line-height: 1.55;
-}
-
-.card-content :deep(p) { margin: 0 0 12px; }
-.card-content :deep(ul),
-.card-content :deep(ol) { text-align: left; }
-.card-content :deep(img) { max-width: 100%; height: auto; }
-.card-content :deep(.katex-display) { overflow-x: auto; margin: 20px 0; }
-
-.card-half {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  padding: 30px clamp(24px, 6vw, 72px);
-}
-
-.card-front {
-  background: #302e29;
-}
-
-.card-back {
-  background: #34312b;
-}
-
-.card-divider {
-  position: relative;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #272521;
-  color: #918878;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.card-divider::before {
-  position: absolute;
-  right: 32px;
-  left: 32px;
-  height: 1px;
-  background: #49443b;
-  content: '';
-}
-
-.card-divider span {
-  z-index: 1;
-  padding: 5px 10px;
-  background: #272521;
-}
-
-.review-card.revealed .card-half {
-  min-height: 0;
-}
-
-.card-back.hidden .card-label,
-.card-back.hidden .card-content {
-  visibility: hidden;
 }
 
 .review-message {
@@ -567,36 +468,6 @@ h1 {
 
 .review-page .review-message strong {
   color: var(--learning-primary);
-}
-
-.review-page .card-label {
-  color: #8db7f4;
-}
-
-.review-page .review-card {
-  border-color: #1d3557;
-  background: #17233b;
-}
-
-.review-page .card-front {
-  background: #1b2b46;
-}
-
-.review-page .card-back {
-  background: #203653;
-}
-
-.review-page .card-divider {
-  background: #17233b;
-  color: #8fa4c2;
-}
-
-.review-page .card-divider::before {
-  background: #385579;
-}
-
-.review-page .card-divider span {
-  background: #17233b;
 }
 
 .review-page .grade-button:hover:not(:disabled) {

@@ -1,16 +1,5 @@
 <template>
-  <AppLayout
-    v-model:collapsed="sidebarCollapsed"
-    :active-view="activeView"
-    :current-session="currentSessionId"
-    :sessions="sessions"
-    :show-history="showHistory"
-    @navigate="navigate"
-    @new-session="openNewSession()"
-    @select-session="selectSession"
-    @rename="renameSession"
-    @delete="deleteSession"
-  >
+  <AppLayout :active-view="activeView" @navigate="navigate">
     <Transition name="page" mode="out-in">
       <component
         :is="currentComponent"
@@ -67,19 +56,13 @@ const activeView = ref<AppView>('home')
 const transientPage = ref<'new-session' | 'anki-creator' | null>(null)
 const initialAgent = ref<AgentType>()
 const editingCard = ref<Card | null>(null)
-const sidebarCollapsed = ref(false)
 
 const {
-  sessions,
-  currentSessionId,
   currentSession,
   currentAgent,
   loading: chatLoading,
   startSession,
   sendMessage,
-  selectSession,
-  renameSession,
-  deleteSession,
 } = useChatSessions()
 
 const currentComponent = computed(() => {
@@ -117,8 +100,6 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
 
   return {}
 })
-
-const showHistory = computed(() => activeView.value === 'chat')
 
 function navigate(view: AppView) {
   transientPage.value = null

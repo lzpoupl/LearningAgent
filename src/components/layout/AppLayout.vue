@@ -1,57 +1,32 @@
 <template>
-  <el-container class="app-layout">
-    <Sidebar
-      :active-view="activeView"
-      :collapsed="collapsed"
-      :current-session="currentSession"
-      :sessions="sessions"
-      :show-history="showHistory"
-      @navigate="emit('navigate', $event)"
-      @new-session="emit('new-session')"
-      @select-session="emit('select-session', $event)"
-      @rename="handleRename"
-      @delete="emit('delete', $event)"
-      @update:collapsed="emit('update:collapsed', $event)"
-    />
+  <el-splitter class="app-layout">
+    <el-splitter-panel class="sidebar-panel" :size="SIDEBAR_WIDTH" :resizable="false">
+      <Sidebar :active-view="activeView" @navigate="emit('navigate', $event)" />
+    </el-splitter-panel>
 
-    <el-container class="main-layout">
-      <el-header class="layout-header" height="58px">
-        <Topbar />
-      </el-header>
-
-      <el-main class="layout-main">
-        <slot />
-      </el-main>
-    </el-container>
-  </el-container>
+    <el-splitter-panel class="main-panel" :resizable="false">
+      <el-container class="main-layout">
+        <el-main class="layout-main">
+          <slot />
+        </el-main>
+      </el-container>
+    </el-splitter-panel>
+  </el-splitter>
 </template>
 
 <script setup lang="ts">
 import Sidebar from './Sidebar.vue'
-import Topbar from './Topbar.vue'
-import type { ChatSession } from '../../types/chat'
 import type { AppView } from '../../types/navigation'
+
+const SIDEBAR_WIDTH = 72
 
 defineProps<{
   activeView: AppView
-  collapsed: boolean
-  currentSession: string
-  sessions: ChatSession[]
-  showHistory: boolean
 }>()
 
 const emit = defineEmits<{
   navigate: [view: AppView]
-  'new-session': []
-  'select-session': [sessionId: string]
-  rename: [sessionId: string, title: string]
-  delete: [sessionId: string]
-  'update:collapsed': [collapsed: boolean]
 }>()
-
-function handleRename(sessionId: string, title: string) {
-  emit('rename', sessionId, title)
-}
 </script>
 
 <style scoped>
@@ -62,15 +37,18 @@ function handleRename(sessionId: string, title: string) {
   min-height: 0;
 }
 
+.sidebar-panel {
+  overflow: hidden;
+}
+
+.main-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .main-layout {
   min-width: 0;
   background: var(--learning-bg);
-}
-
-.layout-header {
-  padding: 0;
-  border-bottom: 1px solid var(--learning-border);
-  background: rgba(255, 255, 255, 0.88);
 }
 
 .layout-main {

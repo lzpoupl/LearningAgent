@@ -72,6 +72,8 @@
     - 展示当前 Agent 可访问的学习资产和权限。
 - `src/components/anki/CardContent.vue`
     - 统一处理 Anki 卡片的 Markdown、LaTeX 和安全 HTML 渲染。
+- `src/components/anki/CardShow.vue`
+    - 统一的卡片展示组件，按 `manager` / `preview` / `review` / `creator` 四种形态展示卡片正反面。
 
 ## Composable 与数据边界
 

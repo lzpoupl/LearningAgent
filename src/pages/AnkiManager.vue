@@ -29,8 +29,7 @@
           <button class="text-button" type="button" @click="showCreateDeck = true">创建牌组 →</button>
         </div>
         <div v-else class="deck-tree" role="tree">
-          <button class="deck-row all-cards-row" type="button"
-            role="treeitem" @click="selectDeck('')">
+          <button class="deck-row all-cards-row" type="button" role="treeitem" @click="selectDeck('')">
             <span class="tree-toggle invisible" aria-hidden="true">›</span>
             <span class="deck-icon" aria-hidden="true">▦</span>
             <span class="deck-name">全部卡片</span>
@@ -38,14 +37,10 @@
           </button>
           <button v-for="row in deckRows" :key="row.deck.path" class="deck-row"
             :class="{ active: selectedDeckPath === row.deck.path, 'drop-target': dropTargetPath === row.deck.path }"
-            :style="{ paddingLeft: `${14 + row.depth * 18}px` }"
-            type="button" role="treeitem" draggable="true"
+            :style="{ paddingLeft: `${14 + row.depth * 18}px` }" type="button" role="treeitem" draggable="true"
             :aria-expanded="row.hasChildren ? row.expanded : undefined"
-            @dragstart="startDeckDrag(row.deck.path, $event)"
-            @dragover.prevent="allowDeckDrop(row.deck.path, $event)"
-            @dragleave="clearDeckDrop"
-            @drop.prevent="dropDeck(row.deck.path, $event)"
-            @dragend="clearDeckDrag"
+            @dragstart="startDeckDrag(row.deck.path, $event)" @dragover.prevent="allowDeckDrop(row.deck.path, $event)"
+            @dragleave="clearDeckDrop" @drop.prevent="dropDeck(row.deck.path, $event)" @dragend="clearDeckDrag"
             @click="selectAndToggleDeck(row.deck.path)">
             <span class="tree-toggle" :class="{ invisible: !row.hasChildren }" aria-hidden="true"
               @click.stop="toggleDeck(row.deck.path)">{{ row.expanded ? '⌄' : '›' }}</span>
@@ -63,7 +58,6 @@
             <h2>{{ selectedDeckPath || '全部卡片' }}</h2>
           </div>
           <div v-if="selectedDeckPath" class="toolbar-actions">
-            <button class="outline-button" type="button" @click="showMoveDeck = true">移动牌组</button>
             <button class="danger-outline" type="button" @click="deleteSelectedDeck">删除牌组</button>
           </div>
         </div>
@@ -96,16 +90,7 @@
         <div v-else class="card-list">
           <article v-for="card in cards" :key="card.id" class="card-item" tabindex="0" @click="openPreview(card)"
             @keydown.enter="openPreview(card)">
-            <div class="card-content">
-              <div class="card-side">
-                <span class="side-label">正面</span>
-               <CardContent class="card-rendered-content" :content="card.front" />
-              </div>
-              <div class="card-side back-side">
-                <span class="side-label">背面</span>
-                 <CardContent class="card-rendered-content" :content="card.back" />
-              </div>
-            </div>
+            <CardShow :front="card.front" :back="card.back" />
             <div class="card-meta">
               <span class="card-deck-path">{{ card.deckPath }}</span>
               <span class="state-badge" :class="`state-${card.state}`">{{ stateLabel(card.state) }}</span>
@@ -143,14 +128,7 @@
           <span>{{ previewCard.deckPath }}</span>
           <span>下次复习：{{ formatDueAt(previewCard.dueAt) }}</span>
         </div>
-        <div class="preview-side">
-          <span class="side-label">正面</span>
-           <CardContent class="rendered-card-content" :content="previewCard.front" />
-        </div>
-        <div class="preview-side preview-side-back">
-          <span class="side-label">背面</span>
-           <CardContent class="rendered-card-content" :content="previewCard.back" />
-        </div>
+        <CardShow variant="preview" :front="previewCard.front" :back="previewCard.back" />
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="previewCard = null">关闭</button>
           <button class="dark-button" type="button" @click="editPreviewCard">编辑卡片</button>
@@ -200,25 +178,6 @@
       </form>
     </div>
 
-    <div v-if="showMoveDeck" class="modal-backdrop" @click.self="showMoveDeck = false">
-      <form class="modal" @submit.prevent="moveSelectedDeck">
-        <div class="modal-heading">
-          <div>
-            <span class="panel-kicker">MOVE DECK</span>
-            <h2>移动牌组</h2>
-          </div>
-          <button class="close-button" type="button" aria-label="关闭" @click="showMoveDeck = false">×</button>
-        </div>
-        <label class="field-label" for="move-deck-target">新牌组路径</label>
-        <input id="move-deck-target" v-model="moveDeckTargetPath" placeholder="例如：数学 / 已掌握" />
-        <p class="modal-hint">当前牌组：{{ selectedDeckPath }}</p>
-        <div class="modal-actions">
-          <button class="outline-button" type="button" @click="showMoveDeck = false">取消</button>
-          <button class="dark-button" type="submit" :disabled="!moveDeckTargetPath.trim() || actionLoading">{{
-            actionLoading ? '移动中...' : '确认移动' }}</button>
-        </div>
-      </form>
-    </div>
   </main>
 </template>
 
@@ -238,7 +197,7 @@ import {
   searchCards,
 } from '../services/anki'
 import type { Card, CardGrade, CardState } from '../types/anki'
-import CardContent from '../components/anki/CardContent.vue'
+import CardShow from '../components/anki/CardShow.vue'
 import {
   aggregateCardCount,
   findDeckNode,
@@ -265,9 +224,7 @@ const actionLoading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const showCreateDeck = ref(false)
-const showMoveDeck = ref(false)
 const newDeckPath = ref('')
-const moveDeckTargetPath = ref('')
 const previewCard = ref<Card | null>(null)
 const movingCard = ref<Card | null>(null)
 const moveTargetPath = ref('')
@@ -523,28 +480,6 @@ function openEditCard(card: Card) {
       console.error(error)
       errorMessage.value = '卡片详情加载失败，请重试。'
     })
-}
-
-async function moveSelectedDeck() {
-  if (!selectedDeckPath.value || !moveDeckTargetPath.value.trim() || actionLoading.value) {
-    return
-  }
-
-  actionLoading.value = true
-  try {
-    let targetPath = moveDeckTargetPath.value.trim()
-    await moveDeck(selectedDeckPath.value, targetPath)
-    selectedDeckPath.value = targetPath
-    moveDeckTargetPath.value = ''
-    showMoveDeck.value = false
-    successMessage.value = '牌组已移动。'
-    await reloadDecks()
-  } catch (error) {
-    console.error(error)
-    errorMessage.value = '牌组移动失败，请重试。'
-  } finally {
-    actionLoading.value = false
-  }
 }
 
 function openMoveCard(card: Card) {
@@ -993,92 +928,6 @@ h2 {
   background: #fff;
 }
 
-.card-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.card-side {
-  min-width: 0;
-  padding: 16px;
-}
-
-.back-side {
-  border-left: 1px solid #eeeae4;
-  background: #fcfbf9;
-}
-
-.side-label {
-  color: #a08c75;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.card-side p {
-  margin: 0;
-}
-
-.card-rendered-content {
-  max-height: 150px;
-  margin-top: 10px;
-  overflow: hidden;
-  color: #49443d;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-.card-rendered-content :deep(p) {
-  margin: 0 0 8px;
-}
-
-.card-rendered-content :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.card-rendered-content :deep(h1),
-.card-rendered-content :deep(h2),
-.card-rendered-content :deep(h3) {
-  margin: 0 0 8px;
-  font-size: 1.05em;
-  line-height: 1.3;
-}
-
-.card-rendered-content :deep(ul),
-.card-rendered-content :deep(ol) {
-  margin: 0 0 8px;
-  padding-left: 20px;
-}
-
-.card-rendered-content :deep(pre) {
-  overflow-x: auto;
-  margin: 0 0 8px;
-  padding: 8px;
-  border-radius: 4px;
-  background: #eeeae4;
-  font-family: Consolas, monospace;
-  font-size: 11px;
-}
-
-.card-rendered-content :deep(img) {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 8px auto;
-  border-radius: 4px;
-}
-
-.card-rendered-content :deep(.katex-display) {
-  overflow-x: auto;
-  margin: 10px 0;
-  text-align: center;
-}
-
-.card-rendered-content :deep(.katex) {
-  font-size: 0.95em;
-}
-
 .card-meta,
 .review-actions {
   display: flex;
@@ -1180,57 +1029,6 @@ h2 {
   font-size: 12px;
 }
 
-.preview-side {
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid #e7e3dc;
-  border-radius: 6px;
-  background: #fcfbf9;
-}
-
-.preview-side-back {
-  background: #f7f4ef;
-}
-
-.rendered-card-content {
-  margin-top: 12px;
-  color: #403a33;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 17px;
-  line-height: 1.6;
-}
-
-.rendered-card-content :deep(p) {
-  margin: 0 0 10px;
-}
-
-.rendered-card-content :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.rendered-card-content :deep(img) {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 10px auto;
-  border-radius: 5px;
-}
-
-.rendered-card-content :deep(.katex-display) {
-  overflow-x: auto;
-  margin: 14px 0;
-  text-align: center;
-}
-
-.rendered-card-content :deep(pre) {
-  overflow-x: auto;
-  padding: 10px;
-  border-radius: 5px;
-  background: #ebe7e0;
-  font-family: Consolas, monospace;
-  font-size: 13px;
-}
-
 .close-button {
   width: 30px;
   height: 30px;
@@ -1299,15 +1097,6 @@ h2 {
     flex-basis: 100%;
   }
 
-  .card-content {
-    grid-template-columns: 1fr;
-  }
-
-  .back-side {
-    border-top: 1px solid #eeeae4;
-    border-left: 0;
-  }
-
   .card-actions {
     width: 100%;
     margin-left: 0;
@@ -1324,7 +1113,6 @@ h2 {
 
 .manager-page .deck-icon,
 .manager-page .card-deck-path,
-.manager-page .side-label,
 .manager-page .text-button,
 .manager-page .card-actions button,
 .manager-page .review-actions button {
@@ -1336,15 +1124,11 @@ h2 {
   background: #eaf2ff;
 }
 
-.manager-page .card-item,
-.manager-page .preview-side {
+.manager-page .card-item {
   border-color: var(--learning-border);
 }
 
-.manager-page .back-side,
-.manager-page .review-actions,
-.manager-page .preview-side,
-.manager-page .preview-side-back {
+.manager-page .review-actions {
   background: var(--learning-surface-muted);
 }
 
