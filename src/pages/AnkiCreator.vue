@@ -21,17 +21,10 @@
           </div>
         </div>
 
-        <label class="field-label" for="deck">目标牌组</label>
-        <div class="deck-row">
-          <select id="deck" v-model="selectedDeckPath"
-            :disabled="isEditing || loadingDecks || saving || decks.length === 0">
-            <option value="" disabled>{{ loadingDecks ? '正在加载牌组...' : '选择一个牌组' }}</option>
-            <option v-for="deck in decks" :key="deck.path" :value="deck.path">
-              {{ deck.path }} · {{ deck.cardCount }} 张
-            </option>
-          </select>
+        <div class="deck-target">
+          <span class="field-label">目标牌组</span>
+          <span class="deck-target-value">{{ selectedDeckPath || '正在确定牌组...' }}</span>
         </div>
-
 
         <div class="field-group">
           <div class="field-header">
@@ -103,6 +96,7 @@ import { flattenDecks, loadDeckTree } from '../composables/useDeckTree'
 
 const props = defineProps<{
   editingCard?: Card | null
+  initialDeckPath?: string
 }>()
 
 defineEmits<{
@@ -110,10 +104,9 @@ defineEmits<{
 }>()
 
 const decks = ref<Deck[]>([])
-const selectedDeckPath = ref(props.editingCard?.deckPath || '')
+const selectedDeckPath = ref(props.editingCard?.deckPath || props.initialDeckPath || '')
 const front = ref(props.editingCard?.front || '')
 const back = ref(props.editingCard?.back || '')
-const loadingDecks = ref(false)
 const saving = ref(false)
 const imageUploading = ref(false)
 const errorMessage = ref('')
@@ -209,7 +202,6 @@ function handleImageSelected(field: 'front' | 'back', event: Event) {
 }
 
 async function loadDecks() {
-  loadingDecks.value = true
   errorMessage.value = ''
 
   try {
@@ -225,8 +217,6 @@ async function loadDecks() {
   } catch (error) {
     console.error(error)
     errorMessage.value = '牌组加载或默认牌组创建失败，请确认 Anki 服务已连接。'
-  } finally {
-    loadingDecks.value = false
   }
 }
 
@@ -367,14 +357,9 @@ h1 {
 }
 
 .panel-heading,
-.preview-topline,
-.deck-row {
+.preview-topline {
   display: flex;
   align-items: center;
-}
-
-.panel-heading,
-.preview-topline {
   justify-content: space-between;
   gap: 14px;
 }
@@ -465,8 +450,29 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(169, 144, 114, 0.12);
 }
 
-.deck-row {
-  gap: 8px;
+.deck-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #dedbd5;
+  border-radius: 6px;
+  background: #fcfcfb;
+}
+
+.deck-target .field-label {
+  margin: 0;
+}
+
+.deck-target-value {
+  min-width: 0;
+  overflow: hidden;
+  color: #4c4944;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-button {
@@ -631,6 +637,15 @@ textarea:focus {
 .anki-page textarea:focus {
   border-color: var(--learning-primary);
   box-shadow: 0 0 0 3px rgba(40, 125, 245, 0.14);
+}
+
+.anki-page .deck-target {
+  border-color: var(--learning-border);
+  background: var(--learning-surface);
+}
+
+.anki-page .deck-target-value {
+  color: var(--learning-primary);
 }
 
 .anki-page .secondary-button {

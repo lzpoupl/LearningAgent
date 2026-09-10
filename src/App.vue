@@ -12,7 +12,7 @@
         @open-agents="navigate('agents')"
         @open-assets="navigate('assets')"
         @open-anki="navigate('review')"
-        @create-card="openCardCreator()"
+        @create-card="openCardCreator(undefined, $event)"
         @edit-card="openCardCreator"
         @browse="navigate('anki')"
         @close="closeTransientPage"
@@ -56,6 +56,7 @@ const activeView = ref<AppView>('home')
 const transientPage = ref<'new-session' | 'anki-creator' | null>(null)
 const initialAgent = ref<AgentType>()
 const editingCard = ref<Card | null>(null)
+const newCardDeckPath = ref<string>()
 
 const {
   currentSession,
@@ -87,7 +88,7 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
   }
 
   if (transientPage.value === 'anki-creator') {
-    return { editingCard: editingCard.value }
+    return { editingCard: editingCard.value, initialDeckPath: newCardDeckPath.value }
   }
 
   if (activeView.value === 'chat') {
@@ -104,6 +105,7 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
 function navigate(view: AppView) {
   transientPage.value = null
   editingCard.value = null
+  newCardDeckPath.value = undefined
   activeView.value = view
 }
 
@@ -111,6 +113,7 @@ function openNewSession(agent?: AgentType) {
   activeView.value = 'chat'
   initialAgent.value = agent
   editingCard.value = null
+  newCardDeckPath.value = undefined
   transientPage.value = 'new-session'
 }
 
@@ -124,15 +127,17 @@ async function startNewSession(agent: AgentType, question: string) {
   await startSession(agent, question)
 }
 
-function openCardCreator(card?: Card) {
+function openCardCreator(card?: Card, deckPath?: string) {
   activeView.value = 'anki'
   editingCard.value = card ?? null
+  newCardDeckPath.value = deckPath
   transientPage.value = 'anki-creator'
 }
 
 function closeTransientPage() {
   transientPage.value = null
   editingCard.value = null
+  newCardDeckPath.value = undefined
   activeView.value = 'anki'
 }
 </script>

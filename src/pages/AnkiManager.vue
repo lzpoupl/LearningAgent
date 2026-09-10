@@ -7,7 +7,6 @@
         <p>按牌组整理、检索和维护你的记忆卡片。</p>
       </div>
       <div class="header-actions">
-        <el-button :icon="Plus" @click="$emit('create-card')">新建卡片</el-button>
         <el-button type="primary" :icon="Plus" @click="showCreateDeck = true">新建牌组</el-button>
       </div>
     </header>
@@ -55,6 +54,7 @@
             <h2>{{ selectedDeckPath || '全部卡片' }}</h2>
           </div>
           <div v-if="selectedDeckPath" class="toolbar-actions">
+            <el-button :icon="Plus" @click="createCardInSelectedDeck">新建卡片</el-button>
             <el-button type="danger" plain @click="deleteSelectedDeck">删除牌组</el-button>
           </div>
         </div>
@@ -82,7 +82,6 @@
             @keydown.enter="openPreview(card)">
             <CardShow :front="card.front" :back="card.back" />
             <div class="card-meta">
-              <span class="card-deck-path">{{ card.deckPath }}</span>
               <span class="state-badge" :class="`state-${card.state}`">{{ stateLabel(card.state) }}</span>
               <span>下次复习：{{ formatDueAt(card.dueAt) }}</span>
               <span class="card-actions">
@@ -91,13 +90,6 @@
                 <el-button link type="info" size="small" @click.stop="resetSelectedCard(card)">忘记</el-button>
                 <el-button link type="danger" size="small" @click.stop="deleteCardItem(card)">删除</el-button>
               </span>
-            </div>
-            <div class="review-actions">
-              <span>复习评分</span>
-              <el-button link type="danger" size="small" @click.stop="gradeSelectedCard(card, 'again')">重来</el-button>
-              <el-button link type="warning" size="small" @click.stop="gradeSelectedCard(card, 'hard')">困难</el-button>
-              <el-button link type="primary" size="small" @click.stop="gradeSelectedCard(card, 'good')">良好</el-button>
-              <el-button link type="success" size="small" @click.stop="gradeSelectedCard(card, 'easy')">简单</el-button>
             </div>
           </article>
         </div>
@@ -185,13 +177,12 @@ import {
   deleteDeck,
   getCard,
   getCards,
-  gradeCard,
   moveCard,
   moveDeck,
   resetCard,
   searchCards,
 } from '../services/anki'
-import type { Card, CardGrade, CardState } from '../types/anki'
+import type { Card, CardState } from '../types/anki'
 import CardShow from '../components/anki/CardShow.vue'
 import {
   aggregateCardCount,
@@ -202,7 +193,7 @@ import {
 } from '../composables/useDeckTree'
 
 const emit = defineEmits<{
-  'create-card': []
+  'create-card': [deckPath: string]
   'edit-card': [card: Card]
 }>()
 
@@ -300,6 +291,14 @@ async function selectDeck(deckPath: string) {
 
 function handleDeckNodeClick(data: TreeNodeData) {
   void selectDeck(data.path)
+}
+
+function createCardInSelectedDeck() {
+  if (!selectedDeckPath.value) {
+    return
+  }
+
+  emit('create-card', selectedDeckPath.value)
 }
 
 const allowDeckDrag: AllowDragFunction = node => Boolean(node.data.path)
@@ -535,20 +534,6 @@ async function resetSelectedCard(card: Card) {
   }
 }
 
-async function gradeSelectedCard(card: Card, grade: CardGrade) {
-  actionLoading.value = true
-  try {
-    await gradeCard(card.id, grade)
-    ElMessage.success('复习结果已记录。')
-    await loadCards()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('复习结果记录失败，请重试。')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
 function stateLabel(state: CardState) {
   const labels: Record<CardState, string> = {
     new: '新卡',
@@ -724,6 +709,7 @@ h2 {
   border-radius: 0;
   color: #4f4a43;
   font-size: 13px;
+  display: flex;
 }
 
 .deck-tree .all-cards-row :deep(.el-button__text) {
