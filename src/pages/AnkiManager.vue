@@ -29,8 +29,7 @@
           <el-button link type="primary" @click="showCreateDeck = true">创建牌组 →</el-button>
         </div>
         <div v-else class="deck-tree">
-          <el-button class="all-cards-row" :class="{ active: selectedDeckPath === '' }" text
-            @click="selectDeck('')">
+          <el-button class="all-cards-row" :class="{ active: selectedDeckPath === '' }" text @click="selectDeck('')">
             <span class="deck-icon" aria-hidden="true">▦</span>
             <span class="deck-name">全部卡片</span>
             <span class="deck-card-count">{{ totalCardCount }}</span>
@@ -72,9 +71,6 @@
           </el-select>
           <el-button :loading="loadingCards" @click="loadCards">查询</el-button>
         </div>
-
-        <div v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</div>
-        <div v-if="successMessage" class="feedback success" role="status">{{ successMessage }}</div>
 
         <div v-if="loadingCards" class="cards-state">正在加载卡片...</div>
         <div v-else-if="cards.length === 0" class="cards-state empty-cards">
@@ -179,6 +175,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { AllowDragFunction, AllowDropFunction, TreeInstance, TreeNodeData } from 'element-plus'
 import { Close, Plus, Search } from '@element-plus/icons-vue'
 
@@ -231,8 +228,6 @@ const stateFilter = ref<CardState | ''>('')
 const loading = ref(false)
 const loadingCards = ref(false)
 const actionLoading = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
 const showCreateDeck = ref(false)
 const newDeckParent = ref<string | undefined>('')
 const newDeckName = ref('')
@@ -275,7 +270,6 @@ async function fetchDeckTree() {
 
 async function reloadDecks() {
   loading.value = true
-  errorMessage.value = ''
 
   try {
     deckTree.value = await fetchDeckTree()
@@ -288,7 +282,7 @@ async function reloadDecks() {
     }
   } catch (error) {
     console.error(error)
-    errorMessage.value = '牌组加载失败，请确认 Anki 服务已连接。'
+    ElMessage.error('牌组加载失败，请确认 Anki 服务已连接。')
   } finally {
     loading.value = false
   }
@@ -340,15 +334,15 @@ async function moveDeckTo(sourcePath: string, dropPath: string, dropType: 'befor
     return
   }
 
-  const targetParentPath = dropType === 'inner' ? dropPath : getParentPath(dropPath)
+  // 情况1：/path/to/a -> /path/to/b (before/after)
+  // 情况2：/path/to/a -> /path/to/b (inner)
+  // 情况3：/path/to/a -> /
+  const targetPath = dropType === 'inner' ? dropPath : getParentPath(dropPath)
 
-  if (!canMoveDeckInto(sourcePath, targetParentPath)) {
+  if (!canMoveDeckInto(sourcePath, targetPath)) {
     await reloadDecks()
     return
   }
-
-  const sourceName = sourcePath.split('/').pop() || sourcePath
-  const targetPath = targetParentPath ? `${targetParentPath}/${sourceName}` : sourceName
 
   if (targetPath === sourcePath) {
     await reloadDecks()
@@ -356,16 +350,15 @@ async function moveDeckTo(sourcePath: string, dropPath: string, dropType: 'befor
   }
 
   actionLoading.value = true
-  errorMessage.value = ''
 
   try {
     await moveDeck(sourcePath, targetPath)
     selectedDeckPath.value = targetPath
-    successMessage.value = `牌组已移动到“${targetPath}”。`
+    ElMessage.success(`牌组已移动到“${targetPath}”。`)
     await reloadDecks()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '牌组移动失败，请重试。'
+    ElMessage.error('牌组移动失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -373,7 +366,6 @@ async function moveDeckTo(sourcePath: string, dropPath: string, dropType: 'befor
 
 async function loadCards() {
   loadingCards.value = true
-  errorMessage.value = ''
 
   try {
     const deckPaths = selectedDeckPath.value
@@ -411,7 +403,7 @@ async function loadCards() {
       })
   } catch (error) {
     console.error(error)
-    errorMessage.value = '卡片加载失败，请稍后重试。'
+    ElMessage.error('卡片加载失败，请稍后重试。')
   } finally {
     loadingCards.value = false
   }
@@ -440,7 +432,6 @@ async function createDeckItem() {
   const path = newDeckParent.value ? `${newDeckParent.value}/${name}` : name
 
   actionLoading.value = true
-  errorMessage.value = ''
 
   try {
     await createDeck(path)
@@ -448,11 +439,11 @@ async function createDeckItem() {
     newDeckName.value = ''
     newDeckParent.value = ''
     selectedDeckPath.value = path
-    successMessage.value = `牌组“${path}”已创建。`
+    ElMessage.success(`牌组“${path}”已创建。`)
     await reloadDecks()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '牌组创建失败，请检查牌组路径。'
+    ElMessage.error('牌组创建失败，请检查牌组路径。')
   } finally {
     actionLoading.value = false
   }
@@ -466,12 +457,12 @@ async function deleteSelectedDeck() {
   actionLoading.value = true
   try {
     await deleteDeck(selectedDeckPath.value)
-    successMessage.value = '牌组已删除。'
+    ElMessage.success('牌组已删除。')
     selectedDeckPath.value = ''
     await reloadDecks()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '牌组删除失败，请重试。'
+    ElMessage.error('牌组删除失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -484,7 +475,7 @@ function openEditCard(card: Card) {
     })
     .catch(error => {
       console.error(error)
-      errorMessage.value = '卡片详情加载失败，请重试。'
+      ElMessage.error('卡片详情加载失败，请重试。')
     })
 }
 
@@ -502,11 +493,11 @@ async function moveSelectedCard() {
   try {
     await moveCard(movingCard.value.id, moveTargetPath.value)
     movingCard.value = null
-    successMessage.value = '卡片已移动。'
+    ElMessage.success('卡片已移动。')
     await loadCards()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '卡片移动失败，请重试。'
+    ElMessage.error('卡片移动失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -520,11 +511,11 @@ async function deleteCardItem(card: Card) {
   actionLoading.value = true
   try {
     await deleteCard(card.id)
-    successMessage.value = '卡片已删除。'
+    ElMessage.success('卡片已删除。')
     await loadCards()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '卡片删除失败，请重试。'
+    ElMessage.error('卡片删除失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -534,11 +525,11 @@ async function resetSelectedCard(card: Card) {
   actionLoading.value = true
   try {
     await resetCard(card.id)
-    successMessage.value = '卡片已重置为新卡状态。'
+    ElMessage.success('卡片已重置为新卡状态。')
     await loadCards()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '卡片重置失败，请重试。'
+    ElMessage.error('卡片重置失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -548,11 +539,11 @@ async function gradeSelectedCard(card: Card, grade: CardGrade) {
   actionLoading.value = true
   try {
     await gradeCard(card.id, grade)
-    successMessage.value = '复习结果已记录。'
+    ElMessage.success('复习结果已记录。')
     await loadCards()
   } catch (error) {
     console.error(error)
-    errorMessage.value = '复习结果记录失败，请重试。'
+    ElMessage.error('复习结果记录失败，请重试。')
   } finally {
     actionLoading.value = false
   }
@@ -820,23 +811,6 @@ h2 {
   flex-shrink: 0;
 }
 
-.feedback {
-  margin-bottom: 14px;
-  padding: 9px 11px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.feedback.error {
-  background: #fff1ee;
-  color: #a34e3f;
-}
-
-.feedback.success {
-  background: #eef7ef;
-  color: #4d7652;
-}
-
 .card-list {
   display: flex;
   flex-direction: column;
@@ -1031,16 +1005,6 @@ h2 {
 .manager-page .state-review {
   background: #e6f4ff;
   color: #1677b8;
-}
-
-.manager-page .feedback.error {
-  background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger);
-}
-
-.manager-page .feedback.success {
-  background: var(--el-color-success-light-9);
-  color: var(--el-color-success);
 }
 
 .manager-page .modal-backdrop {

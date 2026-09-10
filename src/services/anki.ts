@@ -43,10 +43,22 @@ export function createCard(newCard: NewCard): Promise<string> {
   return invoke<string>('anki_create_card', { newCard })
 }
 
-export function moveDeck(sourcePath: string, targetPath: string): Promise<void> {
-  return invoke<void>('anki_move_deck', { sourcePath, targetPath })
+/**
+ * 移动牌组到目标父牌组下。
+ *
+ * 注意：`targetParentPath` 是「目标父牌组」的路径，而不是移动后的完整路径。
+ * 后端会保留源牌组自身的名字，因此 `a -> /path/for` 的结果是 `/path/for/a`。
+ * 若要移到根目录，请传 `/`。
+ */
+export function moveDeck(sourcePath: string, targetParentPath: string): Promise<void> {
+  return invoke<void>('anki_move_deck', { sourcePath, targetPath: targetParentPath })
 }
 
+/**
+ * 移动卡片到目标牌组。
+ *
+ * 注意：`targetDeckPath` 是卡片要放入的具体牌组本身（不能是根 `/`）。
+ */
 export function moveCard(cardId: string, targetDeckPath: string): Promise<void> {
   return invoke<void>('anki_move_card', { cardId, targetDeckPath })
 }
