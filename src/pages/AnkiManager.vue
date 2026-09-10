@@ -311,23 +311,39 @@ function handleDeckNodeClick(data: TreeNodeData) {
 const allowDeckDrag: AllowDragFunction = node => Boolean(node.data.path)
 
 const allowDeckDrop: AllowDropFunction = (draggingNode, dropNode, type) => {
-  if (type !== 'inner') {
-    return false
-  }
+  const draggingPath: string = draggingNode.data.path
+  const dropPath: string = dropNode.data.path
 
-  return canMoveDeckInto(draggingNode.data.path, dropNode.data.path)
+  return canMoveDeckInto(draggingPath, type === 'inner' ? dropPath : getParentPath(dropPath))
 }
 
-function handleDeckDrop(draggingNode: { data: TreeNodeData }, dropNode: { data: TreeNodeData }) {
-  void moveDeckTo(draggingNode.data.path, dropNode.data.path)
+function handleDeckDrop(
+  draggingNode: { data: TreeNodeData },
+  dropNode: { data: TreeNodeData },
+  dropType: 'before' | 'after' | 'inner',
+) {
+  void moveDeckTo(draggingNode.data.path, dropNode.data.path, dropType)
+}
+
+function getParentPath(path: string) {
+  const separatorIndex = path.lastIndexOf('/')
+
+  return separatorIndex === -1 ? '' : path.slice(0, separatorIndex)
 }
 
 function canMoveDeckInto(sourcePath: string, targetParentPath: string) {
   return sourcePath !== targetParentPath && !targetParentPath.startsWith(`${sourcePath}/`)
 }
 
-async function moveDeckTo(sourcePath: string, targetParentPath: string) {
-  if (!sourcePath || !canMoveDeckInto(sourcePath, targetParentPath) || actionLoading.value) {
+async function moveDeckTo(sourcePath: string, dropPath: string, dropType: 'before' | 'after' | 'inner') {
+  if (!sourcePath || actionLoading.value) {
+    return
+  }
+
+  const targetParentPath = dropType === 'inner' ? dropPath : getParentPath(dropPath)
+
+  if (!canMoveDeckInto(sourcePath, targetParentPath)) {
+    await reloadDecks()
     return
   }
 
@@ -335,6 +351,7 @@ async function moveDeckTo(sourcePath: string, targetParentPath: string) {
   const targetPath = targetParentPath ? `${targetParentPath}/${sourceName}` : sourceName
 
   if (targetPath === sourcePath) {
+    await reloadDecks()
     return
   }
 
