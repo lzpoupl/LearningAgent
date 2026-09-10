@@ -39,12 +39,12 @@
         <article class="review-card" :class="{ revealed }" @click="revealed = !revealed">
           <div class="card-half card-front">
             <div class="card-label">问题</div>
-            <div class="card-content" v-html="renderCardContent(currentCard.front)" />
+             <CardContent class="card-content" :content="currentCard.front" />
           </div>
           <div class="card-divider"><span>{{ revealed ? '点击卡片隐藏答案' : '点击卡片查看答案' }}</span></div>
           <div class="card-half card-back" :class="{ hidden: !revealed }">
             <div class="card-label">答案</div>
-            <div class="card-content" v-html="renderCardContent(currentCard.back)" />
+             <CardContent class="card-content" :content="currentCard.back" />
           </div>
         </article>
       </template>
@@ -81,21 +81,22 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import DOMPurify from 'dompurify'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-import { marked } from 'marked'
 
-import { getCards, getSubdecks, gradeCard } from '../services/anki'
+import { getCards, gradeCard } from '../services/anki'
 import type { Card, CardGrade, Deck } from '../types/anki'
+import CardContent from '../components/anki/CardContent.vue'
+import {
+  flattenDecks,
+  flattenDeckRows,
+  getDescendantPaths,
+  loadDeckTree,
+  type DeckNode,
+} from '../composables/useDeckTree'
 
 const emit = defineEmits<{
   browse: []
   'edit-card': [card: Card]
 }>()
-
-type DeckNode = { deck: Deck; children: DeckNode[] }
-type DeckRow = { deck: Deck; depth: number; cardCount: number; hasChildren: boolean }
 
 const decks = ref<Deck[]>([])
 const reviewCards = ref<Card[]>([])
@@ -109,16 +110,15 @@ const errorMessage = ref('')
 
 const currentCard = computed(() => reviewCards.value[currentIndex.value] || null)
 const selectedDeck = computed(() => decks.value.find(deck => deck.path === selectedDeckPath.value) || null)
-const deckRows = computed(() => flattenDeckRows(deckTree.value))
 const deckTree = ref<DeckNode[]>([])
+const deckRows = computed(() => flattenDeckRows(deckTree.value))
 
 async function loadDecks() {
   loading.value = true
   errorMessage.value = ''
 
   try {
-    const roots = await getSubdecks('')
-    const tree = await Promise.all(roots.map(loadDeckNode))
+    const tree = await loadDeckTree()
     deckTree.value = tree
     decks.value = flattenDecks(tree)
     if (!selectedDeckPath.value && decks.value.length) {
@@ -133,37 +133,6 @@ async function loadDecks() {
   }
 }
 
-async function loadDeckNode(deck: Deck): Promise<DeckNode> {
-  const children = await getSubdecks(deck.path)
-  return { deck, children: await Promise.all(children.map(loadDeckNode)) }
-}
-
-function flattenDecks(nodes: DeckNode[]): Deck[] {
-  return nodes.flatMap(node => [node.deck, ...flattenDecks(node.children)])
-}
-
-function flattenDeckRows(nodes: DeckNode[], depth = 0): DeckRow[] {
-  return nodes.flatMap(node => [
-    {
-      deck: {
-        ...node.deck,
-        cardCount: aggregateCardCount(node),
-      },
-      depth,
-      cardCount: aggregateCardCount(node),
-      hasChildren: node.children.length > 0,
-    },
-    ...flattenDeckRows(node.children, depth + 1),
-  ])
-}
-
-function aggregateCardCount(node: DeckNode): number {
-  return node.deck.cardCount + node.children.reduce(
-    (total, child) => total + aggregateCardCount(child),
-    0,
-  )
-}
-
 async function loadReviewCards(excludedCardId?: string) {
   if (!selectedDeckPath.value) {
     reviewCards.value = []
@@ -173,7 +142,7 @@ async function loadReviewCards(excludedCardId?: string) {
   loading.value = true
   errorMessage.value = ''
   try {
-    const deckPaths = getDescendantPaths(selectedDeckPath.value)
+    const deckPaths = getDescendantPaths(selectedDeckPath.value, deckTree.value)
     const loadedCards = await Promise.all(deckPaths.map(deckPath => getCards(deckPath, {})))
     const cardsById = new Map<string, Card>()
     loadedCards.flat().forEach(card => cardsById.set(card.id, card))
@@ -208,28 +177,6 @@ async function selectDeck(deckPath: string) {
   await loadReviewCards()
 }
 
-function getDescendantPaths(deckPath: string): string[] {
-  const node = findDeckNode(deckTree.value, deckPath)
-  return node ? [node.deck.path, ...node.children.flatMap(child => getNodePaths(child))] : [deckPath]
-}
-
-function getNodePaths(node: DeckNode): string[] {
-  return [node.deck.path, ...node.children.flatMap(child => getNodePaths(child))]
-}
-
-function findDeckNode(nodes: DeckNode[], deckPath: string): DeckNode | null {
-  for (const node of nodes) {
-    if (node.deck.path === deckPath) {
-      return node
-    }
-    const found = findDeckNode(node.children, deckPath)
-    if (found) {
-      return found
-    }
-  }
-  return null
-}
-
 async function gradeCurrentCard(grade: CardGrade) {
   if (!currentCard.value || grading.value) {
     return
@@ -261,23 +208,6 @@ function editCurrentCard() {
   if (currentCard.value) {
     emit('edit-card', currentCard.value)
   }
-}
-
-function renderCardContent(content: string) {
-  const formulas: string[] = []
-  const replaceFormula = (formula: string, displayMode: boolean) => {
-    const index = formulas.length
-    formulas.push(katex.renderToString(formula.trim(), { displayMode, throwOnError: false }))
-    return `ANKI_KATEX_FORMULA_${index}`
-  }
-  const withPlaceholders = content
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_, formula: string) => replaceFormula(formula, true))
-    .replace(/\$([^$\n]+?)\$/g, (_, formula: string) => replaceFormula(formula, false))
-  let html = marked.parse(withPlaceholders, { async: false })
-  formulas.forEach((formula, index) => {
-    html = html.replace(`ANKI_KATEX_FORMULA_${index}`, formula)
-  })
-  return DOMPurify.sanitize(html)
 }
 
 onMounted(loadDecks)

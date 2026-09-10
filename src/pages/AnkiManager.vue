@@ -99,11 +99,11 @@
             <div class="card-content">
               <div class="card-side">
                 <span class="side-label">正面</span>
-                <div class="card-rendered-content" v-html="renderCardContent(card.front)" />
+               <CardContent class="card-rendered-content" :content="card.front" />
               </div>
               <div class="card-side back-side">
                 <span class="side-label">背面</span>
-                <div class="card-rendered-content" v-html="renderCardContent(card.back)" />
+                 <CardContent class="card-rendered-content" :content="card.back" />
               </div>
             </div>
             <div class="card-meta">
@@ -145,11 +145,11 @@
         </div>
         <div class="preview-side">
           <span class="side-label">正面</span>
-          <div class="rendered-card-content" v-html="renderCardContent(previewCard.front)" />
+           <CardContent class="rendered-card-content" :content="previewCard.front" />
         </div>
         <div class="preview-side preview-side-back">
           <span class="side-label">背面</span>
-          <div class="rendered-card-content" v-html="renderCardContent(previewCard.back)" />
+           <CardContent class="rendered-card-content" :content="previewCard.back" />
         </div>
         <div class="modal-actions">
           <button class="outline-button" type="button" @click="previewCard = null">关闭</button>
@@ -224,10 +224,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import DOMPurify from 'dompurify'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-import { marked } from 'marked'
 
 import {
   createDeck,
@@ -235,33 +231,28 @@ import {
   deleteDeck,
   getCard,
   getCards,
-  getSubdecks,
   gradeCard,
   moveCard,
   moveDeck,
   resetCard,
   searchCards,
 } from '../services/anki'
-import type { Card, CardGrade, CardState, Deck } from '../types/anki'
+import type { Card, CardGrade, CardState } from '../types/anki'
+import CardContent from '../components/anki/CardContent.vue'
+import {
+  aggregateCardCount,
+  findDeckNode,
+  flattenDecks,
+  flattenVisibleDecks,
+  getDescendantPaths,
+  loadDeckTree,
+  type DeckNode,
+} from '../composables/useDeckTree'
 
 const emit = defineEmits<{
   'create-card': []
   'edit-card': [card: Card]
 }>()
-
-type DeckNode = {
-  deck: Deck
-  children: DeckNode[]
-  expanded: boolean
-}
-
-type DeckRow = {
-  deck: Deck
-  cardCount: number
-  depth: number
-  expanded: boolean
-  hasChildren: boolean
-}
 
 const deckTree = ref<DeckNode[]>([])
 const selectedDeckPath = ref('')
@@ -288,42 +279,8 @@ const deckCount = computed(() => allDecks.value.length)
 const deckRows = computed(() => flattenVisibleDecks(deckTree.value))
 const totalCardCount = computed(() => deckTree.value.reduce((total, node) => total + aggregateCardCount(node), 0))
 
-function flattenDecks(nodes: DeckNode[]): Deck[] {
-  return nodes.flatMap(node => [node.deck, ...flattenDecks(node.children)])
-}
-
-function flattenVisibleDecks(nodes: DeckNode[], depth = 0): DeckRow[] {
-  return nodes.flatMap(node => [
-    {
-      deck: node.deck,
-      cardCount: aggregateCardCount(node),
-      depth,
-      expanded: node.expanded,
-      hasChildren: node.children.length > 0,
-    },
-    ...(node.expanded ? flattenVisibleDecks(node.children, depth + 1) : []),
-  ])
-}
-
-function aggregateCardCount(node: DeckNode): number {
-  return node.deck.cardCount + node.children.reduce(
-    (total, child) => total + aggregateCardCount(child),
-    0,
-  )
-}
-
 async function fetchDeckTree() {
-  const roots = await getSubdecks('')
-  return Promise.all(roots.map(deck => buildDeckNode(deck)))
-}
-
-async function buildDeckNode(deck: Deck): Promise<DeckNode> {
-  const children = await getSubdecks(deck.path)
-  return {
-    deck,
-    children: await Promise.all(children.map(child => buildDeckNode(child))),
-    expanded: false,
-  }
+  return loadDeckTree()
 }
 
 async function reloadDecks() {
@@ -449,26 +406,13 @@ async function dropDeck(targetParentPath: string, event: DragEvent) {
   }
 }
 
-function findDeckNode(nodes: DeckNode[], deckPath: string): DeckNode | null {
-  for (const node of nodes) {
-    if (node.deck.path === deckPath) {
-      return node
-    }
-    const found = findDeckNode(node.children, deckPath)
-    if (found) {
-      return found
-    }
-  }
-  return null
-}
-
 async function loadCards() {
   loadingCards.value = true
   errorMessage.value = ''
 
   try {
     const deckPaths = selectedDeckPath.value
-      ? getDescendantDeckPaths(selectedDeckPath.value)
+      ? getDescendantPaths(selectedDeckPath.value, deckTree.value)
       : allDecks.value.map(deck => deck.path)
 
     const normalizedKeyword = keyword.value.trim()
@@ -508,20 +452,6 @@ async function loadCards() {
   }
 }
 
-function getDescendantDeckPaths(deckPath: string): string[] {
-  const node = findDeckNode(deckTree.value, deckPath)
-
-  if (!node) {
-    return [deckPath]
-  }
-
-  return [node.deck.path, ...node.children.flatMap(child => getDescendantPaths(child))]
-}
-
-function getDescendantPaths(node: DeckNode): string[] {
-  return [node.deck.path, ...node.children.flatMap(child => getDescendantPaths(child))]
-}
-
 function clearSearch() {
   keyword.value = ''
   loadCards()
@@ -539,29 +469,6 @@ function editPreviewCard() {
   const card = previewCard.value
   previewCard.value = null
   emit('edit-card', card)
-}
-
-function renderCardContent(content: string) {
-  const formulas: string[] = []
-  const replaceFormula = (formula: string, displayMode: boolean) => {
-    const index = formulas.length
-    formulas.push(katex.renderToString(formula.trim(), {
-      displayMode,
-      throwOnError: false,
-    }))
-    return `ANKI_KATEX_FORMULA_${index}`
-  }
-
-  const withPlaceholders = content
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_, formula: string) => replaceFormula(formula, true))
-    .replace(/\$([^$\n]+?)\$/g, (_, formula: string) => replaceFormula(formula, false))
-
-  let html = marked.parse(withPlaceholders, { async: false })
-  formulas.forEach((formula, index) => {
-    html = html.replace(`ANKI_KATEX_FORMULA_${index}`, formula)
-  })
-
-  return DOMPurify.sanitize(html)
 }
 
 async function createDeckItem() {

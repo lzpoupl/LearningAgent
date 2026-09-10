@@ -1,5 +1,9 @@
 import { createApp } from "vue";
+import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from "./App.vue";
+import 'element-plus/dist/index.css'
+import './styles/app.css'
 
 async function bootstrap(): Promise<void> {
     // 真实 Tauri WebView 会在页面加载前注入只读的 __TAURI_INTERNALS__，
@@ -14,7 +18,7 @@ async function bootstrap(): Promise<void> {
         const { setupMocks } = await import("./mocks");
         setupMocks();
     }
-    createApp(App).mount("#app");
+    createApp(App).use(ElementPlus, { locale: zhCn }).mount("#app");
 }
 
 void bootstrap();

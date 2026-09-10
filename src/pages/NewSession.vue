@@ -1,102 +1,67 @@
 <template>
-  <div class="new-session-page">
+  <main class="new-session-page">
+    <section class="new-session-content">
+      <div class="welcome-mark">✦</div>
+      <span class="eyebrow">NEW LEARNING SESSION</span>
+      <h1>开始新的学习</h1>
+      <p class="subtitle">选择一个学习助手，然后输入你想学习的问题</p>
 
-    <!-- 顶部 -->
-    <header class="page-header">
-      <div class="logo">
-        <div class="logo-icon">
-          L
-        </div>
+      <el-card class="start-card" shadow="never">
+        <el-form label-position="top" @submit.prevent="startChat">
+          <el-form-item label="学习助手">
+            <el-select v-model="selectedAgent" class="agent-select" placeholder="选择学习助手">
+              <el-option
+                v-for="agent in agentCatalog"
+                :key="agent.id"
+                :label="agent.name"
+                :value="agent.id"
+              >
+                <div class="agent-option">
+                  <el-avatar :size="28" :style="{ background: agent.color }">
+                    {{ agent.icon }}
+                  </el-avatar>
+                  <div>
+                    <strong>{{ agent.name }}</strong>
+                    <span>{{ agent.description }}</span>
+                  </div>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
 
-        <span>
-          LearningAgent
-        </span>
-      </div>
-    </header>
+          <el-form-item label="学习问题">
+            <el-input
+              v-model="question"
+              :rows="5"
+              maxlength="2000"
+              placeholder="输入你想学习的问题..."
+              resize="none"
+              show-word-limit
+              type="textarea"
+              @keydown.enter.exact.prevent="startChat"
+            />
+          </el-form-item>
 
-    <!-- 中央内容 -->
-    <main class="new-session-content">
-
-      <div class="welcome-icon">
-        ✦
-      </div>
-
-      <h1>
-        开始新的学习
-      </h1>
-
-      <p class="subtitle">
-        选择一个学习助手，然后输入你想学习的问题
-      </p>
-
-      <div class="agent-select-wrap">
-        <label class="agent-label">学习助手</label>
-
-        <div
-          class="agent-select"
-          @click="agentMenuOpen = !agentMenuOpen"
-        >
-          <div class="agent-selected">
-            <span class="agent-icon">{{ selectedAgentInfo.icon }}</span>
-            <span>{{ selectedAgentInfo.name }}</span>
+          <div class="form-footer">
+            <span>Agent 会结合已启用的学习资料回答</span>
+            <el-button :disabled="!question.trim()" native-type="submit" type="primary">
+              开始学习
+              <el-icon><ArrowRight /></el-icon>
+            </el-button>
           </div>
-          <span class="agent-caret">▾</span>
-        </div>
+        </el-form>
+      </el-card>
 
-        <div
-          v-if="agentMenuOpen"
-          class="agent-menu"
-        >
-          <button
-            v-for="agent in agents"
-            :key="agent.id"
-            class="agent-option"
-            :class="{ active: selectedAgent === agent.id }"
-            type="button"
-            @click="selectAgent(agent.id)"
-          >
-            <span class="agent-icon small">{{ agent.icon }}</span>
-            <span class="agent-option-text">
-              <span class="agent-option-name">{{ agent.name }}</span>
-              <span class="agent-option-desc">{{ agent.description }}</span>
-            </span>
-            <span v-if="selectedAgent === agent.id" class="selected-dot">✓</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 搜索框 -->
-      <div class="search-area">
-
-        <textarea
-          v-model="question"
-          placeholder="输入你想学习的问题..."
-          rows="3"
-          @keydown.enter.exact.prevent="startChat"
-        />
-
-        <button
-          class="search-button"
-          :disabled="!question.trim()"
-          @click="startChat"
-        >
-          <span>开始学习</span>
-          <span class="arrow">→</span>
-        </button>
-
-      </div>
-
-      <div class="search-tip">
-        选择学习助手后，输入问题即可开始新的学习会话
-      </div>
-
-    </main>
-
-  </div>
+      <p class="shortcut-tip">Enter 开始 · Shift + Enter 换行</p>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
+import { ArrowRight } from '@element-plus/icons-vue'
+
+import { agentCatalog } from '../data/agents'
 import type { AgentType } from '../types/chat'
 
 const props = defineProps<{
@@ -104,373 +69,163 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  start: [
-    agent: AgentType,
-    question: string
-  ]
+  start: [agent: AgentType, question: string]
 }>()
 
 const selectedAgent = ref<AgentType>(props.initialAgent ?? 'math')
-const agentMenuOpen = ref(false)
-
 const question = ref('')
 
-const agents = [
-  {
-    id: 'math' as AgentType,
-    name: '数学老师',
-    description: '数学问题、公式推导与解题思路',
-    icon: '∑'
+watch(
+  () => props.initialAgent,
+  agent => {
+    if (agent) {
+      selectedAgent.value = agent
+    }
   },
-  {
-    id: 'english' as AgentType,
-    name: '英语老师',
-    description: '英语语法、单词与语言表达',
-    icon: 'A'
-  }
-]
-
-const selectedAgentInfo = computed(
-  () => agents.find((agent) => agent.id === selectedAgent.value) ?? agents[0]
 )
 
-function selectAgent(agentId: AgentType) {
-  selectedAgent.value = agentId
-  agentMenuOpen.value = false
-}
-
 function startChat() {
-  const text = question.value.trim()
+  const content = question.value.trim()
 
-  if (!text) {
+  if (!content) {
     return
   }
 
-  emit('start', selectedAgent.value, text)
+  emit('start', selectedAgent.value, content)
 }
 </script>
 
 <style scoped>
 .new-session-page {
+  display: flex;
   width: 100%;
-  height: 100vh;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-
-  display: flex;
-  flex-direction: column;
-
-  background: #ffffff;
-}
-
-.page-header {
-  height: 64px;
-  flex-shrink: 0;
-
-  display: flex;
-  align-items: center;
-
-  padding: 0 28px;
-
-  border-bottom: 1px solid #eeeeee;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.logo-icon {
-  width: 24px;
-  height: 24px;
-
-  display: flex;
+  height: 100%;
+  min-height: 0;
   align-items: center;
   justify-content: center;
-
-  border-radius: 7px;
-
-  background: #111111;
-  color: #ffffff;
-  font-size: 12px;
+  padding: 24px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 70% 20%, rgba(40, 125, 245, 0.1), transparent 32%),
+    var(--learning-bg);
 }
 
 .new-session-content {
-  width: min(760px, 82vw);
-  max-width: 760px;
-  height: calc(100vh - 64px);
-
-  margin: 0 auto;
-
-  padding: 18px 0 10px;
-
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  width: min(720px, 100%);
+  text-align: center;
 }
 
-@media (max-width: 700px) {
-  .new-session-content {
-    width: calc(100vw - 24px);
-    max-width: 100%;
-  }
-}
-
-.welcome-icon {
+.welcome-mark {
+  display: grid;
   width: 48px;
   height: 48px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  margin-bottom: 18px;
-
-  border-radius: 14px;
-
-  background: #111111;
-  color: #ffffff;
-
+  margin: 0 auto 16px;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #438fff, #5c6df5);
+  box-shadow: 0 10px 25px rgba(50, 120, 240, 0.22);
+  color: #fff;
   font-size: 22px;
 }
 
-h1 {
+.eyebrow {
+  color: var(--el-color-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+h1,
+p {
   margin: 0;
-
-  font-size: 30px;
-  font-weight: 600;
-  color: #222222;
 }
 
-.subtitle {
-  margin: 12px 0 32px;
-
-  font-size: 14px;
-  color: #999999;
-}
-
-/* Agent */
-
-.agent-select-wrap {
-  position: relative;
-  width: 100%;
-  margin-top: 12px;
-}
-
-.agent-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #666666;
-}
-
-.agent-select {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid #d9d9d9;
-  border-radius: 10px;
-  background: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-}
-
-.agent-selected {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #222222;
-  font-size: 14px;
+h1 {
+  margin-top: 9px;
+  color: var(--learning-text);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(30px, 5vw, 42px);
   font-weight: 500;
 }
 
-.agent-caret {
-  color: #666666;
-  font-size: 12px;
+.subtitle {
+  margin-top: 10px;
+  color: var(--learning-text-secondary);
+  font-size: 13px;
 }
 
-.agent-menu {
-  position: absolute;
-  z-index: 20;
-  left: 0;
-  right: 0;
-  top: calc(100% + 8px);
-  max-height: 180px;
-  border: 1px solid #e5e5e5;
-  border-radius: 10px;
-  overflow-y: auto;
-  background: #ffffff;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+.start-card {
+  margin-top: 28px;
+  border-color: var(--learning-border);
+  box-shadow: var(--learning-shadow);
+  text-align: left;
+}
+
+.start-card :deep(.el-card__body) {
+  padding: clamp(18px, 4vw, 30px);
+}
+
+.start-card :deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+
+.agent-select {
+  width: 100%;
 }
 
 .agent-option {
   display: flex;
   align-items: center;
-  width: 100%;
-  gap: 10px;
-  padding: 10px 12px;
-  border: none;
-  background: #ffffff;
-  text-align: left;
-  cursor: pointer;
+  gap: 9px;
 }
 
-.agent-option + .agent-option {
-  border-top: 1px solid #f0f0f0;
-}
-
-.agent-option.active {
-  background: #f7f7f7;
-}
-
-.agent-option-text {
+.agent-option > div {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 2px;
 }
 
-.agent-option-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #222222;
-}
-
-.agent-option-desc {
-  font-size: 11px;
-  color: #999999;
-}
-
-.agent-icon {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  border-radius: 8px;
-
-  background: #eeeeee;
-
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.agent-icon.small {
-  width: 22px;
-  height: 22px;
+.agent-option strong {
+  color: var(--learning-text);
   font-size: 12px;
 }
 
-.selected-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #111111;
-  color: #ffffff;
+.agent-option span {
+  color: var(--learning-text-muted);
   font-size: 10px;
 }
 
-/* 搜索框 */
-
-.search-area {
-  width: min(100%, 760px);
-  height: clamp(140px, 22vh, 240px);
-
-  margin-top: 18px;
-
-  padding: 10px 12px;
-
-  border: 1px solid #d9d9d9;
-  border-radius: 14px;
-
-  box-shadow:
-    0 4px 20px rgba(0, 0, 0, 0.06);
-}
-
-@media (max-width: 1000px) {
-  .agent-select-wrap {
-    width: min(100%, 380px);
-  }
-
-  .search-area {
-    width: min(100%, 380px);
-  }
-}
-
-textarea {
-  width: 100%;
-  height: calc(100% - 50px);
-
-  display: block;
-
-  padding: 6px 6px 8px;
-
-  border: none;
-  outline: none;
-
-  resize: none;
-
-  font-size: 15px;
-  line-height: 1.5;
-
-  color: #222222;
-}
-
-textarea::placeholder {
-  color: #aaaaaa;
-}
-
-.search-button {
-  height: 34px;
-
+.form-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-
-  margin-left: auto;
-  padding: 0 14px;
-
-  border: none;
-  border-radius: 8px;
-
-  background: #111111;
-  color: #ffffff;
-
-  cursor: pointer;
-
-  font-size: 12px;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.search-button:disabled {
-  background: #dddddd;
-  cursor: not-allowed;
+.form-footer > span {
+  color: var(--learning-text-muted);
+  font-size: 10px;
 }
 
-.arrow {
-  font-size: 17px;
-}
-
-.search-tip {
+.shortcut-tip {
   margin-top: 12px;
+  color: var(--learning-text-muted);
+  font-size: 10px;
+}
 
-  font-size: 11px;
-  color: #aaaaaa;
+@media (max-width: 520px) {
+  .new-session-page {
+    align-items: flex-start;
+    padding: 28px 14px;
+  }
+
+  .form-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .form-footer :deep(.el-button) {
+    width: 100%;
+  }
 }
 </style>

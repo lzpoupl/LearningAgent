@@ -92,13 +92,13 @@
         </div>
         <div class="card-preview">
           <span class="preview-label">正面</span>
-          <div v-if="front.trim()" class="markdown-body" v-html="frontMarkdown" />
+           <CardContent v-if="front.trim()" class="markdown-body" :content="front" />
           <p v-else class="placeholder">你的问题会显示在这里</p>
         </div>
         <div class="preview-divider"><span>翻面后</span></div>
         <div class="card-preview answer">
           <span class="preview-label">背面</span>
-          <div v-if="back.trim()" class="markdown-body" v-html="backMarkdown" />
+           <CardContent v-if="back.trim()" class="markdown-body" :content="back" />
           <p v-else class="placeholder">答案与解释会显示在这里</p>
         </div>
         <div class="preview-note">
@@ -112,18 +112,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import DOMPurify from 'dompurify'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-import { marked } from 'marked'
 
-import { createCard, createDeck, getSubdecks, updateCardContent } from '../services/anki'
+import { createCard, createDeck, updateCardContent } from '../services/anki'
 import type { Card, Deck } from '../types/anki'
-
-type DeckNode = {
-  deck: Deck
-  children: DeckNode[]
-}
+import CardContent from '../components/anki/CardContent.vue'
+import { flattenDecks, loadDeckTree } from '../composables/useDeckTree'
 
 const props = defineProps<{
   editingCard?: Card | null
@@ -152,38 +145,6 @@ const backImageInput = ref<HTMLInputElement | null>(null)
 
 const isEditing = computed(() => Boolean(props.editingCard))
 const canSave = computed(() => Boolean(selectedDeckPath.value && front.value.trim() && back.value.trim()))
-const frontMarkdown = computed(() => renderMarkdown(front.value))
-const backMarkdown = computed(() => renderMarkdown(back.value))
-
-function renderMarkdown(content: string) {
-  const formulas: string[] = []
-  const formulaPlaceholder = (formula: string, displayMode: boolean) => {
-    const index = formulas.length
-    const placeholder = `ANKI_KATEX_FORMULA_${index}`
-
-    formulas.push(
-      katex.renderToString(formula.trim(), {
-        displayMode,
-        throwOnError: false,
-      })
-    )
-
-    return placeholder
-  }
-
-  const contentWithPlaceholders = content
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_, formula: string) => formulaPlaceholder(formula, true))
-    .replace(/\$([^$\n]+?)\$/g, (_, formula: string) => formulaPlaceholder(formula, false))
-
-  let html = marked.parse(contentWithPlaceholders, { async: false })
-
-  formulas.forEach((formula, index) => {
-    html = html.replace(`ANKI_KATEX_FORMULA_${index}`, formula)
-  })
-
-  return DOMPurify.sanitize(html)
-}
-
 function openImagePicker(field: 'front' | 'back') {
   const input = field === 'front' ? frontImageInput.value : backImageInput.value
   input?.click()
@@ -252,9 +213,8 @@ async function loadDecks() {
   errorMessage.value = ''
 
   try {
-    const rootDecks = await getSubdecks('')
-    const deckTree = await Promise.all(rootDecks.map(deck => loadDeckNode(deck)))
-    decks.value = flattenDeckTree(deckTree)
+    const deckTree = await loadDeckTree()
+    decks.value = flattenDecks(deckTree)
 
     if (decks.value.length > 0) {
       if (!selectedDeckPath.value || !decks.value.some(deck => deck.path === selectedDeckPath.value)) {
@@ -268,31 +228,6 @@ async function loadDecks() {
   } finally {
     loadingDecks.value = false
   }
-}
-
-async function loadDeckNode(deck: Deck): Promise<DeckNode> {
-  const children = await getSubdecks(deck.path)
-  return {
-    deck,
-    children: await Promise.all(children.map(child => loadDeckNode(child))),
-  }
-}
-
-function aggregateCardCount(node: DeckNode): number {
-  return node.deck.cardCount + node.children.reduce(
-    (total, child) => total + aggregateCardCount(child),
-    0,
-  )
-}
-
-function flattenDeckTree(nodes: DeckNode[]): Deck[] {
-  return nodes.flatMap(node => [
-    {
-      ...node.deck,
-      cardCount: aggregateCardCount(node),
-    },
-    ...flattenDeckTree(node.children),
-  ])
 }
 
 async function createNewDeck() {

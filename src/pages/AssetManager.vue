@@ -6,40 +6,45 @@
         <h1>学习资料</h1>
         <p>PDF、PPT、笔记等非结构化学习资产</p>
       </div>
-      <button class="dark-button" type="button" @click="openUploadPicker">＋ 添加资料</button>
-      <input ref="fileInput" class="hidden-file-input" type="file" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp" @change="handleFilesSelected" />
+      <el-upload
+        ref="uploadRef"
+        action="#"
+        :auto-upload="false"
+        :show-file-list="false"
+        multiple
+        accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
+        :on-change="handleFilesSelected"
+      >
+        <el-button type="primary">
+          <el-icon><Plus /></el-icon>
+          添加资料
+        </el-button>
+      </el-upload>
     </header>
 
     <section class="materials-toolbar">
-      <div class="subject-tabs" role="tablist" aria-label="按学科筛选">
-        <button
-          v-for="subject in subjects"
-          :key="subject"
-          class="subject-tab"
-          :class="{ active: selectedSubject === subject }"
-          type="button"
-          role="tab"
-          :aria-selected="selectedSubject === subject"
-          @click="selectedSubject = subject"
-        >
-          {{ subject }}
-          <span>{{ subjectCount(subject) }}</span>
-        </button>
-      </div>
-      <label class="sort-control">
+      <el-tabs v-model="selectedSubject" class="subject-tabs" type="card">
+        <el-tab-pane v-for="subject in subjects" :key="subject" :name="subject">
+          <template #label>
+            {{ subject }}
+            <span>{{ subjectCount(subject) }}</span>
+          </template>
+        </el-tab-pane>
+      </el-tabs>
+      <div class="sort-control">
         <span>排序</span>
-        <select v-model="sortBy" aria-label="资料排序">
-          <option value="updated">最近添加</option>
-          <option value="name">名称</option>
-          <option value="size">文件大小</option>
-        </select>
-      </label>
+        <el-select v-model="sortBy" aria-label="资料排序" size="small">
+          <el-option label="最近添加" value="updated" />
+          <el-option label="名称" value="name" />
+          <el-option label="文件大小" value="size" />
+        </el-select>
+      </div>
     </section>
 
     <div v-if="uploadError" class="feedback error" role="alert">{{ uploadError }}</div>
 
     <section v-if="filteredMaterials.length" class="materials-grid" aria-label="资料列表">
-      <article v-for="material in filteredMaterials" :key="material.id" class="material-card">
+      <el-card v-for="material in filteredMaterials" :key="material.id" class="material-card" shadow="hover" :body-style="{ padding: '0' }">
         <div class="material-cover" :class="`cover-${material.kind}`">
           <span class="file-mark">{{ material.extension }}</span>
           <span class="file-type">{{ material.typeLabel }}</span>
@@ -52,47 +57,47 @@
             <span>添加于 {{ material.addedAt }}</span>
           </div>
           <div class="material-actions">
-            <button class="outline-button" type="button" @click="openMaterial(material)">打开</button>
-            <button class="remove-button" type="button" title="移除资料" @click="removeMaterial(material.id)">移除</button>
+            <el-button plain size="small" @click="openMaterial(material)">打开</el-button>
+            <el-button text type="danger" size="small" title="移除资料" @click="removeMaterial(material.id)">移除</el-button>
           </div>
         </div>
-      </article>
+      </el-card>
     </section>
 
     <section v-else class="empty-materials">
-      <div class="empty-icon">＋</div>
-      <h2>{{ materials.length ? '这个学科还没有资料' : '添加第一份学习资料' }}</h2>
-      <p>{{ materials.length ? '切换其他学科，或添加一份新的资料。' : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
-      <button class="dark-button" type="button" @click="openUploadPicker">选择文件</button>
+      <el-empty :description="materials.length ? '这个学科还没有资料' : '添加第一份学习资料'">
+        <p>{{ materials.length ? '切换其他学科，或添加一份新的资料。' : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}</p>
+        <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
+      </el-empty>
     </section>
 
-    <div v-if="showSubjectDialog" class="modal-backdrop" @click.self="cancelUpload">
-      <form class="modal" @submit.prevent="confirmUpload">
-        <div class="modal-heading">
-          <div>
-            <span class="panel-kicker">ADD MATERIAL</span>
-            <h2>添加学习资料</h2>
-          </div>
-          <button class="close-button" type="button" aria-label="关闭" @click="cancelUpload">×</button>
-        </div>
-        <p class="selected-files">已选择 {{ pendingFiles.length }} 个文件，每个文件会生成一个独立资料模块。</p>
-        <label class="field-label" for="material-subject">所属学科</label>
-        <select id="material-subject" v-model="pendingSubject">
-          <option v-for="subject in subjectOptions" :key="subject" :value="subject">{{ subject }}</option>
-        </select>
-        <label class="field-label" for="new-subject">或新建学科</label>
-        <input id="new-subject" v-model="newSubject" placeholder="例如：操作系统" />
-        <div class="modal-actions">
-          <button class="outline-button" type="button" @click="cancelUpload">取消</button>
-          <button class="dark-button" type="submit" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())">添加资料</button>
-        </div>
-      </form>
-    </div>
+    <el-dialog v-model="showSubjectDialog" title="添加学习资料" width="min(460px, 92vw)" destroy-on-close @closed="resetPendingUpload">
+      <p class="selected-files">已选择 {{ pendingFiles.length }} 个文件，每个文件会生成一个独立资料模块。</p>
+      <el-form label-position="top" @submit.prevent="confirmUpload">
+        <el-form-item label="所属学科">
+          <el-select v-model="pendingSubject" class="dialog-control">
+            <el-option v-for="subject in subjectOptions" :key="subject" :label="subject" :value="subject" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="或新建学科">
+          <el-input v-model="newSubject" placeholder="例如：操作系统" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelUpload">取消</el-button>
+        <el-button type="primary" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())" @click="confirmUpload">
+          添加资料
+        </el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
+import type { UploadFile, UploadInstance } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 
 type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'document'
 
@@ -108,7 +113,7 @@ type Material = {
   url: string
 }
 
-const fileInput = ref<HTMLInputElement | null>(null)
+const uploadRef = ref<UploadInstance>()
 const materials = ref<Material[]>([])
 const selectedSubject = ref('全部')
 const pendingFiles = ref<File[]>([])
@@ -144,26 +149,28 @@ function subjectCount(subject: string) {
 }
 
 function openUploadPicker() {
-  fileInput.value?.click()
+  const uploadElement = uploadRef.value?.$el as HTMLElement | undefined
+  uploadElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()
 }
 
-function handleFilesSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files || [])
-  input.value = ''
+function handleFilesSelected(file: UploadFile) {
+  const rawFile = file.raw
 
-  if (!files.length) {
+  if (!rawFile) {
     return
   }
 
-  const unsupported = files.find(file => !isSupportedFile(file))
-  if (unsupported) {
-    uploadError.value = `暂不支持“${unsupported.name}”，请选择 PDF、PPT 或笔记文件。`
+  if (!isSupportedFile(rawFile)) {
+    uploadError.value = `暂不支持“${rawFile.name}”，请选择 PDF、PPT 或笔记文件。`
+    ElMessage.error(uploadError.value)
+    uploadRef.value?.clearFiles()
     return
   }
 
   uploadError.value = ''
-  pendingFiles.value = files
+  if (!pendingFiles.value.some(item => item.name === rawFile.name && item.size === rawFile.size)) {
+    pendingFiles.value.push(rawFile)
+  }
   showSubjectDialog.value = true
 }
 
@@ -199,9 +206,14 @@ function confirmUpload() {
 }
 
 function cancelUpload() {
+  uploadRef.value?.clearFiles()
+  resetPendingUpload()
+  showSubjectDialog.value = false
+}
+
+function resetPendingUpload() {
   pendingFiles.value = []
   newSubject.value = ''
-  showSubjectDialog.value = false
 }
 
 function openMaterial(material: Material) {

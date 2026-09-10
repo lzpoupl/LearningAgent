@@ -1,5 +1,14 @@
 export type AgentType = 'math' | 'english'
 
+export interface AgentInfo {
+  id: AgentType
+  name: string
+  description: string
+  icon: string
+  color: string
+  capabilities: string[]
+}
+
 export type MessageRole = 'user' | 'assistant'
 
 export type ContentType = 'text' | 'latex' | 'result'
