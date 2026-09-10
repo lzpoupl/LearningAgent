@@ -2,7 +2,6 @@
   <main class="anki-page">
     <header class="anki-header">
       <div>
-        <div class="eyebrow">学习资产 / ANKI</div>
         <h1>{{ isEditing ? '编辑卡片' : '制作一张可复习的卡片' }}</h1>
         <p>{{ isEditing ? '修改卡片内容，保留已有的复习进度。' : '把刚刚理解的知识点压缩成一次清晰的记忆提取。' }}</p>
       </div>
@@ -14,15 +13,9 @@
 
     <section class="anki-layout">
       <form class="editor-panel" @submit.prevent="saveCard">
-        <div class="panel-heading">
-          <div>
-            <span class="panel-kicker">CARD BUILDER</span>
-            <h2>{{ isEditing ? '编辑内容' : '卡片内容' }}</h2>
-          </div>
-        </div>
 
         <div class="deck-target">
-          <span class="field-label">目标牌组</span>
+          <span class="field-label">目标牌组:</span>
           <span class="deck-target-value">{{ selectedDeckPath || '正在确定牌组...' }}</span>
         </div>
 
@@ -68,15 +61,9 @@
       <aside class="preview-panel">
         <div class="preview-topline">
           <span class="panel-kicker">LIVE PREVIEW</span>
-          <span class="preview-chip">{{ selectedDeckPath || '未选择牌组' }}</span>
         </div>
-        <CardShow
-          variant="creator"
-          :front="front"
-          :back="back"
-          front-placeholder="你的问题会显示在这里"
-          back-placeholder="答案与解释会显示在这里"
-        />
+        <CardShow variant="creator" :front="front" :back="back" front-placeholder="你的问题会显示在这里"
+          back-placeholder="答案与解释会显示在这里" />
         <div class="preview-note">
           <span class="note-mark">✦</span>
           <span>一张卡片只测试一个主要记忆点。复杂内容建议拆成多张卡片。</span>
@@ -356,7 +343,6 @@ h1 {
   padding: clamp(22px, 4vw, 38px);
 }
 
-.panel-heading,
 .preview-topline {
   display: flex;
   align-items: center;
@@ -383,7 +369,6 @@ h2 {
 }
 
 .field-label {
-  display: block;
   margin: 0 0 8px;
   color: #4c4944;
   font-size: 12px;
@@ -450,17 +435,6 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(169, 144, 114, 0.12);
 }
 
-.deck-target {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #dedbd5;
-  border-radius: 6px;
-  background: #fcfcfb;
-}
-
 .deck-target .field-label {
   margin: 0;
 }
@@ -473,6 +447,7 @@ textarea:focus {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-left: 2em;
 }
 
 .icon-button {

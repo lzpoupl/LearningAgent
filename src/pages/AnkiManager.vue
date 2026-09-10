@@ -2,7 +2,6 @@
   <main class="manager-page">
     <header class="manager-header">
       <div>
-        <div class="eyebrow">学习资产 / ANKI</div>
         <h1>卡片管理</h1>
         <p>按牌组整理、检索和维护你的记忆卡片。</p>
       </div>
@@ -127,12 +126,10 @@
           </div>
           <el-button :icon="Close" circle aria-label="关闭" @click="showCreateDeck = false" />
         </div>
-        <label class="field-label" for="new-deck-parent">所属牌组</label>
         <el-tree-select id="new-deck-parent" v-model="newDeckParent" class="deck-select" :data="deckOptions"
-          node-key="value" check-strictly clearable default-expand-all placeholder="不选择则创建在顶层" />
-        <label class="field-label" for="new-deck-name">牌组名称</label>
+          node-key="value" check-strictly clearable default-expand-all placeholder="牌组位置，不选择则创建在顶层" />
         <el-input id="new-deck-name" v-model="newDeckName" class="deck-name-input" autofocus clearable
-          placeholder="例如：错题" />
+          placeholder="新牌组名称" />
         <p class="modal-hint">新牌组将创建在所选牌组的下一级；留空则创建在顶层。</p>
         <div class="modal-actions">
           <el-button @click="showCreateDeck = false">取消</el-button>
@@ -907,6 +904,7 @@ h2 {
 .modal .deck-select,
 .modal .deck-name-input {
   width: 100%;
+  margin-top: 15px;
 }
 
 .modal-hint {
