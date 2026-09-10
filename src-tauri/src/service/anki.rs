@@ -11,7 +11,7 @@ use crate::interface::anki::{
 use crate::repository::anki as card_repo;
 use crate::repository::deck as deck_repo;
 
-use super::scheduler::{CardMemory, SchedulerRegistry, SchedulingAlgorithm, SM2};
+use super::scheduler::{schedule, CardMemory, SchedulerRegistry, SchedulingAlgorithm, SM2};
 
 /// Anki 服务：拥有数据库连接与算法注册表，在应用启动时构建一次，之后由各命令共享。
 pub struct AnkiService {
@@ -111,14 +111,14 @@ impl AnkiService {
     pub fn grade_card(&self, card_id: &str, grade: CardGrade) -> Result<ReviewOutcome, AnkiError> {
         let conn = self.conn()?;
         let id = Self::parse_id(card_id)?;
-        let schedule =
+        let record =
             card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
         let card_repo::ScheduleRecord {
             state,
             algorithm,
             scheduler_state,
             ..
-        } = schedule;
+        } = record;
 
         let algorithm_impl = self.algorithm_for(&algorithm);
         let memory = CardMemory {
@@ -126,7 +126,7 @@ impl AnkiService {
             algorithm_state: Self::parse_algorithm_state(scheduler_state, card_id)?,
         };
 
-        let decision = algorithm_impl.review(memory, grade, Utc::now())?;
+        let decision = schedule(algorithm_impl.as_ref(), memory, grade, Utc::now())?;
 
         let due_at = decision.due_at.to_rfc3339();
         let next = card_repo::ScheduleRecord {
@@ -153,14 +153,14 @@ impl AnkiService {
     pub fn get_review_options(&self, card_id: &str) -> Result<Vec<ReviewOption>, AnkiError> {
         let conn = self.conn()?;
         let id = Self::parse_id(card_id)?;
-        let schedule =
+        let record =
             card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
         let card_repo::ScheduleRecord {
             state,
             algorithm,
             scheduler_state,
             ..
-        } = schedule;
+        } = record;
 
         let algorithm = self.algorithm_for(&algorithm);
         let memory_state = Self::parse_algorithm_state(scheduler_state, card_id)?;
@@ -175,7 +175,8 @@ impl AnkiService {
 
         let mut options = Vec::with_capacity(grades.len());
         for grade in grades {
-            let decision = algorithm.review(
+            let decision = schedule(
+                algorithm.as_ref(),
                 CardMemory {
                     state,
                     algorithm_state: memory_state.clone(),
@@ -186,7 +187,6 @@ impl AnkiService {
             options.push(ReviewOption {
                 grade,
                 interval_label: format_interval(decision.due_at, now),
-                due_at: Some(decision.due_at.to_rfc3339()),
             });
         }
 
@@ -339,11 +339,13 @@ mod tests {
     fn grade_card_persists_sm2_result_and_supports_continuation() {
         let (service, db, card_id) = setup_service("sm2");
 
+        // 新卡首次 Good 属于学习步骤：10 分钟后回到 Review，算法状态尚未推进。
         let first = service.grade_card(&card_id, CardGrade::Good).unwrap();
         assert_eq!(first.card_id, card_id);
         assert_eq!(first.state, CardState::Review);
         assert!(first.due_at.is_some());
 
+        // 第二次 Good 才是真正的 Review，由 SM-2 安排并从 repetitions=1 开始。
         let second = service.grade_card(&card_id, CardGrade::Good).unwrap();
         assert_eq!(second.state, CardState::Review);
 
@@ -354,8 +356,29 @@ mod tests {
         assert_eq!(schedule.algorithm, "sm2");
         let state: serde_json::Value =
             serde_json::from_str(schedule.scheduler_state.as_deref().unwrap()).unwrap();
-        assert_eq!(state["repetitions"], 2);
+        assert_eq!(state["repetitions"], 1);
         assert!(schedule.due_at.is_some());
+    }
+
+    #[test]
+    fn grade_card_again_returns_to_learning_after_minute() {
+        let (service, db, card_id) = setup_service("sm2");
+
+        service.grade_card(&card_id, CardGrade::Good).unwrap();
+        let outcome = service.grade_card(&card_id, CardGrade::Again).unwrap();
+        assert_eq!(outcome.state, CardState::Learning);
+
+        let conn = db.lock().unwrap();
+        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
+        let due_at = schedule.due_at.unwrap();
+        let due = DateTime::parse_from_rfc3339(&due_at).unwrap();
+        let minutes = (due.with_timezone(&Utc) - Utc::now()).num_minutes();
+        assert!(
+            (0..=1).contains(&minutes),
+            "应在约 1 分钟后复习，实际 {minutes}"
+        );
     }
 
     #[test]

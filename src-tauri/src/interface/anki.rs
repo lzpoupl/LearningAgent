@@ -100,7 +100,6 @@ pub struct ReviewOutcome {
 pub struct ReviewOption {
     pub grade: CardGrade,
     pub interval_label: String,
-    pub due_at: Option<String>,
 }
 
 /// 接口错误

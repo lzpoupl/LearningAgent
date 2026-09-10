@@ -6,8 +6,8 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{after_failure_state, CardMemory, SchedulingAlgorithm, SchedulingDecision, FSRS};
-use crate::interface::anki::{AnkiError, CardGrade, CardState};
+use super::{AlgorithmOutcome, SchedulingAlgorithm, FSRS};
+use crate::interface::anki::{AnkiError, CardGrade};
 
 /// 可提取性公式中的常量：R(t,S) = (1 + FACTOR * t / S)^DECAY。
 const FACTOR: f64 = 19.0 / 81.0;
@@ -173,11 +173,11 @@ impl SchedulingAlgorithm for Fsrs {
 
     fn review(
         &self,
-        memory: CardMemory,
+        algorithm_state: Option<serde_json::Value>,
         grade: CardGrade,
         now: DateTime<Utc>,
-    ) -> Result<SchedulingDecision, AnkiError> {
-        let state: FsrsState = match memory.algorithm_state {
+    ) -> Result<AlgorithmOutcome, AnkiError> {
+        let state: FsrsState = match algorithm_state {
             Some(value) => serde_json::from_value(value).map_err(|e| AnkiError {
                 code: "invalid_state".into(),
                 message: format!("无法解析 FSRS 状态: {e}"),
@@ -202,14 +202,8 @@ impl SchedulingAlgorithm for Fsrs {
         };
 
         let interval_days = stability.max(1.0).ceil() as i64;
-        let next_state = if grade == CardGrade::Again {
-            after_failure_state(memory.state)
-        } else {
-            CardState::Review
-        };
 
-        Ok(SchedulingDecision {
-            state: next_state,
+        Ok(AlgorithmOutcome {
             due_at: now + Duration::days(interval_days),
             algorithm_state: serde_json::to_value(FsrsState {
                 difficulty,
@@ -233,19 +227,9 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
 
         for grade in [CardGrade::Again, CardGrade::Hard, CardGrade::Good, CardGrade::Easy] {
-            let result = algorithm
-                .review(
-                    CardMemory {
-                        state: CardState::New,
-                        algorithm_state: None,
-                    },
-                    grade,
-                    now,
-                )
-                .unwrap();
+            let result = algorithm.review(None, grade, now).unwrap();
             println!(
-                "FSRS first grade={grade:?} state={:?} due_at={} algorithm_state={}",
-                result.state,
+                "FSRS first grade={grade:?} due_at={} algorithm_state={}",
                 result.due_at.to_rfc3339(),
                 serde_json::to_string_pretty(&result.algorithm_state).unwrap()
             );
@@ -258,30 +242,18 @@ mod tests {
         let first_at = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
         let second_at = Utc.with_ymd_and_hms(2026, 1, 8, 12, 0, 0).unwrap();
         let mut state = None;
-        let mut card_state = CardState::New;
 
         for (grade, now) in [
             (CardGrade::Good, first_at),
             (CardGrade::Easy, second_at),
             (CardGrade::Again, second_at),
         ] {
-            let result = algorithm
-                .review(
-                    CardMemory {
-                        state: card_state,
-                        algorithm_state: state,
-                    },
-                    grade,
-                    now,
-                )
-                .unwrap();
+            let result = algorithm.review(state, grade, now).unwrap();
             println!(
-                "FSRS sequence grade={grade:?} state={:?} due_at={} algorithm_state={}",
-                result.state,
+                "FSRS sequence grade={grade:?} due_at={} algorithm_state={}",
                 result.due_at.to_rfc3339(),
                 serde_json::to_string_pretty(&result.algorithm_state).unwrap()
             );
-            card_state = result.state;
             state = Some(result.algorithm_state);
         }
     }

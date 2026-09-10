@@ -283,10 +283,7 @@ export class AnkiMock {
 
     return (Object.keys(intervals) as CardGrade[]).map(grade => ({
       grade,
-      intervalLabel: intervals[grade].label,
-      dueAt: intervals[grade].days === 0
-        ? new Date(Date.now() + 10 * 60_000).toISOString()
-        : new Date(Date.now() + intervals[grade].days * 86_400_000).toISOString(),
+      intervalLabel: intervals[grade].label
     }))
   }
 
