@@ -1,5 +1,12 @@
 <template>
   <main class="new-session-page">
+    <button class="back-button" type="button" @click="emit('back')">
+      <el-icon>
+        <ArrowLeft />
+      </el-icon>
+      返回对话
+    </button>
+
     <section class="new-session-content">
       <div class="welcome-mark">✦</div>
       <span class="eyebrow">NEW LEARNING SESSION</span>
@@ -12,6 +19,7 @@
             <el-select
               v-model="selectedAgent"
               class="agent-select"
+              popper-class="agent-select-popper"
               :disabled="loadingAgents || agents.length === 0"
               placeholder="选择学习助手"
             >
@@ -54,7 +62,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { ArrowRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 import { listAgents } from '../services/agent'
 import type { AgentInfo, AgentType } from '../types/chat'
@@ -65,6 +73,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   start: [agent: AgentType, question: string]
+  back: []
 }>()
 
 const agents = ref<AgentInfo[]>([])
@@ -114,6 +123,7 @@ onMounted(loadAgents)
 
 <style scoped>
 .new-session-page {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
@@ -125,6 +135,35 @@ onMounted(loadAgents)
   background:
     radial-gradient(circle at 70% 20%, rgba(40, 125, 245, 0.1), transparent 32%),
     var(--learning-bg);
+}
+
+.back-button {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--learning-border);
+  border-radius: 999px;
+  background: var(--learning-surface);
+  box-shadow: 0 2px 10px rgba(23, 35, 59, 0.05);
+  color: var(--learning-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.back-button:hover {
+  border-color: #b7d0f8;
+  background: #eef5ff;
+  color: var(--learning-primary);
+}
+
+.back-button:focus-visible {
+  outline: 2px solid var(--learning-primary);
+  outline-offset: 2px;
 }
 
 .new-session-content {
@@ -190,6 +229,14 @@ h1 {
   width: 100%;
 }
 
+/* 下拉选项：抬高每行高度，让助手图标与文字有足够呼吸空间 */
+:global(.agent-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 56px;
+  padding: 9px 12px;
+  line-height: 1.35;
+}
+
 .field-error {
   display: block;
   margin-top: 6px;
@@ -241,6 +288,11 @@ h1 {
   .new-session-page {
     align-items: flex-start;
     padding: 28px 14px;
+  }
+
+  .back-button {
+    top: 14px;
+    left: 14px;
   }
 
   .form-footer {

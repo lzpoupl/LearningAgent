@@ -6,6 +6,7 @@
         :key="componentKey"
         v-bind="currentComponentProps"
         @start="startNewSession"
+        @back="closeNewSession"
         @start-chat="startChat"
         @new-session="openNewSession()"
         @send="sendMessage"
@@ -139,6 +140,14 @@ function closeTransientPage() {
   editingCard.value = null
   newCardDeckPath.value = undefined
   activeView.value = 'anki'
+}
+
+function closeNewSession() {
+  transientPage.value = null
+  initialAgent.value = undefined
+  editingCard.value = null
+  newCardDeckPath.value = undefined
+  activeView.value = 'chat'
 }
 </script>
 
