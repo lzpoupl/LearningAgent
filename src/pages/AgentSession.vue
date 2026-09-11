@@ -2,13 +2,13 @@
   <main class="session-page">
     <section class="session-layout">
       <el-card class="conversation-card" shadow="never">
-        <template #header>
+        <template v-if="currentMessages.length" #header>
           <div class="conversation-header">
             <div class="agent-heading">
               <el-avatar v-if="currentAgentInfo" :size="38" :style="{ background: currentAgentInfo.color }">
                 {{ currentAgentInfo.icon }}
               </el-avatar>
-              <el-avatar v-else :size="38">?</el-avatar>
+              <el-avatar v-else class="empty-avatar" :size="38" />
               <div>
                 <strong>{{ currentAgentInfo?.name ?? currentAgent }}</strong>
                 <span><i />{{ agentError || '基于学习资产回答' }}</span>
@@ -25,11 +25,29 @@
         </template>
 
         <div ref="messageContainer" class="message-list" aria-live="polite">
-          <el-empty v-if="currentMessages.length === 0" :image-size="72" description="从一个问题开始今天的学习">
-            <el-button type="primary" plain @click="emit('new-session')">
-              开始新的学习
-            </el-button>
-          </el-empty>
+          <div v-if="currentMessages.length === 0" class="new-session-intro">
+            <div class="welcome-mark">✦</div>
+            <span class="eyebrow">NEW LEARNING SESSION</span>
+            <h1>开始新的学习</h1>
+            <p class="subtitle">选择一个学习助手，然后输入你想学习的问题</p>
+
+            <el-select v-model="selectedAgent" class="agent-select" popper-class="agent-select-popper"
+              placeholder="请选择学习助手" :disabled="!agents.length">
+              <template #prefix>
+                <el-avatar v-if="selectedAgentInfo" :size="18" :style="{ background: selectedAgentInfo.color }">
+                  {{ selectedAgentInfo.icon }}
+                </el-avatar>
+              </template>
+              <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
+                <span class="agent-option-label">
+                  <el-avatar :size="20" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
+                  {{ agent.name }}
+                </span>
+                <span class="agent-option-value">{{ agent.description }}</span>
+              </el-option>
+            </el-select>
+            <p v-if="agentsError" class="intro-error" role="alert">{{ agentsError }}</p>
+          </div>
 
           <ChatMessage v-for="message in currentMessages" :key="message.id" :message="message" />
 
@@ -43,53 +61,96 @@
 
         <template #footer>
           <form class="composer" @submit.prevent="send">
-            <el-input v-model="inputMessage" :disabled="loading || !currentSession" :rows="2" maxlength="4000"
+            <el-input v-model="inputMessage" :disabled="loading" :rows="2" maxlength="4000"
               placeholder="输入你的问题..." resize="none" show-word-limit type="textarea"
               @keydown.enter.exact.prevent="send" />
-            <el-button class="send-button" circle :disabled="!inputMessage.trim() || loading || !currentSession"
+            <el-button class="send-button" circle :disabled="!inputMessage.trim() || loading || !activeAgent"
               native-type="submit" type="primary">
               <el-icon>
                 <Promotion />
               </el-icon>
             </el-button>
           </form>
-          <div class="composer-tip">Enter 发送 · Shift + Enter 换行</div>
+          <div class="composer-tip">
+            <template v-if="activeAgent">Enter 发送 · Shift + Enter 换行</template>
+            <template v-else>请先选择学习助手</template>
+          </div>
         </template>
       </el-card>
 
-       <ChatContextPanel v-if="currentAgentInfo" :agent="currentAgentInfo" :has-session="Boolean(currentSession)" />
+      <ChatContextPanel :agents="agents" :current-session-id="currentSessionId" :default-agent-id="conversationAgent"
+        :sessions="sessions" @select-session="emit('select-session', $event)" />
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Loading, Plus, Promotion } from '@element-plus/icons-vue'
 
 import ChatContextPanel from '../components/chat/ChatContextPanel.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
-import { getAgent } from '../services/agent'
+import { getAgent, listAgents } from '../services/agent'
 import type { AgentInfo, AgentType, ChatSession } from '../types/chat'
 
 const props = defineProps<{
   currentAgent: AgentType
   currentSession: ChatSession | null
   loading: boolean
+  initialAgent?: AgentType
+  sessions: ChatSession[]
+  currentSessionId: string
 }>()
 
 const emit = defineEmits<{
   'new-session': []
   send: [content: string]
+  start: [agent: AgentType, content: string]
+  'select-session': [sessionId: string]
 }>()
 
+const agents = ref<AgentInfo[]>([])
+const agentsError = ref('')
+const selectedAgent = ref<AgentType>(props.initialAgent || props.currentAgent)
 const inputMessage = ref('')
 const messageContainer = ref<HTMLElement | null>(null)
 
 const currentAgentInfo = ref<AgentInfo | null>(null)
 const currentMessages = computed(() => props.currentSession?.messages ?? [])
+const activeAgent = computed(() => (props.currentSession ? props.currentAgent : selectedAgent.value))
+const selectedAgentInfo = computed(() => agents.value.find(agent => agent.id === selectedAgent.value) ?? null)
+// 右栏只跟随当前打开的会话，左上手选助手不会带动它
+const conversationAgent = computed(() => props.currentSession?.agent ?? '')
 const agentError = ref('')
 
 let agentRequestId = 0
+
+async function loadAgents() {
+  agentsError.value = ''
+
+  try {
+    agents.value = (await listAgents()).filter(agent => agent.enabled)
+  } catch (error) {
+    console.error(error)
+    agentsError.value = '学习助手加载失败，请稍后重试。'
+    return
+  }
+
+  adoptLastConversationAgent()
+}
+
+// 没有选中的助手时，沿用最近一次会话使用的助手；没有历史会话则保持空白
+function adoptLastConversationAgent() {
+  if (selectedAgent.value && agents.value.some(agent => agent.id === selectedAgent.value)) {
+    return
+  }
+
+  const latestSession = [...props.sessions]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .find(session => agents.value.some(agent => agent.id === session.agent))
+
+  selectedAgent.value = latestSession?.agent ?? ''
+}
 
 async function loadAgent(agentId: AgentType) {
   if (!agentId) {
@@ -116,13 +177,20 @@ async function loadAgent(agentId: AgentType) {
 
 function send() {
   const content = inputMessage.value.trim()
+  const agent = activeAgent.value
 
-  if (!content || props.loading || !props.currentSession) {
+  if (!content || props.loading || !agent) {
     return
   }
 
   inputMessage.value = ''
-  emit('send', content)
+
+  if (props.currentSession) {
+    emit('send', content)
+    return
+  }
+
+  emit('start', agent, content)
 }
 
 async function scrollToBottom() {
@@ -140,9 +208,35 @@ watch(
 
 watch(
   () => props.currentAgent,
-  agent => void loadAgent(agent),
+  agent => {
+    if (agent) {
+      selectedAgent.value = agent
+    }
+  },
   { immediate: true },
 )
+
+watch(
+  () => props.initialAgent,
+  agent => {
+    if (agent) {
+      selectedAgent.value = agent
+    }
+  },
+)
+
+watch(
+  () => props.sessions.length,
+  () => {
+    if (!selectedAgent.value) {
+      adoptLastConversationAgent()
+    }
+  },
+)
+
+watch(activeAgent, agent => void loadAgent(agent), { immediate: true })
+
+onMounted(loadAgents)
 </script>
 
 <style scoped>
@@ -233,6 +327,12 @@ watch(
   background: currentColor;
 }
 
+.empty-avatar {
+  background: var(--learning-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--learning-border);
+  color: transparent;
+}
+
 .message-list {
   min-height: 0;
   flex: 1;
@@ -241,9 +341,80 @@ watch(
   background: var(--learning-surface-muted);
 }
 
-.message-list :deep(.el-empty) {
+.new-session-intro {
+  display: flex;
   height: 100%;
-  padding: 20px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.welcome-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #438fff, #5c6df5);
+  box-shadow: 0 10px 25px rgba(50, 120, 240, 0.22);
+  color: #fff;
+  font-size: 22px;
+}
+
+.eyebrow {
+  color: var(--el-color-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.new-session-intro h1 {
+  margin: 9px 0 0;
+  color: var(--learning-text);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 500;
+}
+
+.new-session-intro .subtitle {
+  margin: 10px 0 0;
+  color: var(--learning-text-secondary);
+  font-size: 13px;
+}
+
+.new-session-intro .agent-select {
+  width: min(420px, 100%);
+  margin-top: 22px;
+}
+
+.agent-option-label {
+  display: inline-flex;
+  float: left;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-option-value {
+  float: right;
+  color: #8492a6;
+  font-size: 13px;
+}
+
+/* 下拉选项留出图标与右对齐描述的空间 */
+:global(.agent-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 40px;
+  padding: 8px 16px;
+  line-height: 1.5;
+}
+
+.intro-error {
+  margin: 12px 0 0;
+  color: var(--el-color-danger);
+  font-size: 11px;
 }
 
 .loading-state {
@@ -302,6 +473,10 @@ watch(
 
   .message-list {
     padding: 16px 12px;
+  }
+
+  .new-session-intro {
+    padding: 12px;
   }
 
   .conversation-header :deep(.el-button) {

@@ -1,138 +1,172 @@
 <template>
-  <el-card class="context-panel" shadow="never">
+  <el-card class="history-panel" shadow="never">
     <template #header>
-      <strong>当前学习上下文</strong>
+      <strong>历史会话</strong>
     </template>
 
-    <div class="context-agent">
-      <el-avatar :size="34" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
-      <div>
-        <strong>{{ agent.name }}</strong>
-        <span>{{ hasSession ? '会话已连接' : '等待新的会话' }}</span>
-      </div>
+    <div class="scope-row">
+      <span class="scope-label">查看助手</span>
+      <el-select v-model="scopeAgent" class="agent-filter" placeholder="选择学习助手" size="small"
+        :disabled="!agents.length">
+        <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
+          <span class="agent-option">
+            <el-avatar :size="18" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
+            {{ agent.name }}
+          </span>
+        </el-option>
+      </el-select>
     </div>
 
-    <div class="context-section">
-      <span class="context-label">可用学习资产</span>
-      <div v-if="contextLoading" class="context-state">正在加载学习资产...</div>
-      <div v-else-if="contextError" class="context-state error-state" role="alert">{{ contextError }}</div>
-      <template v-else-if="context?.assets.length">
-        <div v-for="asset in context.assets" :key="asset.id" class="context-item">
-          <el-icon>
-            <Document v-if="asset.type === 'document'" />
-            <Notebook v-else-if="asset.type === 'collection'" />
-            <Collection v-else />
-          </el-icon>
-          <div>
-            <strong>{{ asset.name }}</strong>
-            <span>{{ asset.access }}</span>
-          </div>
-        </div>
-      </template>
-      <div v-else class="context-state">暂无可用学习资产</div>
-    </div>
-
-    <div class="permission-list">
-      <span class="context-label">Agent 权限</span>
-      <span v-for="permission in context?.permissions ?? []" :key="permission.key" :class="{ disabled: !permission.enabled }">
-        <el-icon><Check v-if="permission.enabled" /><Close v-else /></el-icon>
-        {{ permission.label }}
-      </span>
-      <span v-if="!contextLoading && !context?.permissions.length" class="context-state">暂无权限配置</span>
+    <div v-if="!historySessions.length" class="panel-state">该学习助手还没有历史会话</div>
+    <div v-else class="session-list">
+      <button v-for="session in historySessions" :key="session.id" class="session-item"
+        :class="{ active: session.id === currentSessionId }" type="button"
+        @click="emit('select-session', session.id)">
+        <strong>{{ session.title }}</strong>
+        <span>{{ sessionTime(session.createdAt) }} · {{ session.messages.length }} 条消息</span>
+      </button>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Check, Close, Collection, Document, Notebook } from '@element-plus/icons-vue'
-import { getAgentContext } from '../../services/agent'
-import type { AgentContext, AgentInfo } from '../../types/chat'
+import { computed, ref, watch } from 'vue'
+import type { AgentInfo, ChatSession } from '../../types/chat'
 
 const props = defineProps<{
-  agent: AgentInfo
-  hasSession: boolean
+  agents: AgentInfo[]
+  sessions: ChatSession[]
+  currentSessionId: string
+  defaultAgentId?: string
 }>()
 
-const context = ref<AgentContext | null>(null)
-const contextLoading = ref(false)
-const contextError = ref('')
-let contextRequestId = 0
+const emit = defineEmits<{
+  'select-session': [sessionId: string]
+}>()
 
-async function loadContext(agentId: string) {
-  const requestId = ++contextRequestId
-  contextLoading.value = true
-  contextError.value = ''
+const scopeAgent = ref(props.defaultAgentId || props.agents[0]?.id || '')
 
-  try {
-    const loadedContext = await getAgentContext(agentId)
-    if (requestId === contextRequestId) {
-      context.value = loadedContext
+const historySessions = computed(() =>
+  props.sessions.filter(session => session.agent === scopeAgent.value)
+)
+
+// 右栏只跟随当前打开的会话，左上手选助手不会带动它
+watch(
+  () => props.defaultAgentId,
+  agentId => {
+    if (agentId) {
+      scopeAgent.value = agentId
     }
-  } catch (error) {
-    console.error(error)
-    if (requestId === contextRequestId) {
-      context.value = null
-      contextError.value = '学习上下文加载失败'
-    }
-  } finally {
-    if (requestId === contextRequestId) {
-      contextLoading.value = false
-    }
-  }
-}
+  },
+)
 
 watch(
-  () => props.agent.id,
-  agentId => void loadContext(agentId),
-  { immediate: true },
+  () => props.agents,
+  agents => {
+    if (!scopeAgent.value && agents.length) {
+      scopeAgent.value = agents[0].id
+    }
+  },
 )
+
+function sessionTime(value: string): string {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  const isToday = date.toDateString() === new Date().toDateString()
+
+  return isToday ? `今天 ${time}` : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+}
 </script>
 
 <style scoped>
-.context-panel {
+.history-panel {
   min-width: 0;
   border-color: var(--learning-border);
   box-shadow: var(--learning-shadow);
 }
 
-.context-panel :deep(.el-card__header) {
+.history-panel :deep(.el-card__header) {
   padding: 16px 17px;
   border-bottom-color: var(--learning-border);
 }
 
-.context-panel :deep(.el-card__body) {
-  padding: 16px;
+.history-panel :deep(.el-card__body) {
+  padding: 14px;
 }
 
-.context-panel :deep(.el-card__header) strong {
+.history-panel :deep(.el-card__header) strong {
   color: var(--learning-text);
   font-size: 12px;
 }
 
-.context-agent,
-.context-item,
-.permission-list > span:not(.context-label) {
+.scope-row {
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.context-agent {
-  gap: 9px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid var(--learning-border);
+.scope-label {
+  flex: 0 0 auto;
+  color: var(--learning-text-muted);
+  font-size: 10px;
 }
 
-.context-agent > div,
-.context-item > div {
-  display: flex;
+.agent-filter {
   min-width: 0;
+  flex: 1;
+}
+
+.agent-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-state {
+  color: var(--learning-text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.session-list {
+  display: flex;
+  max-height: 320px;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.session-item {
+  display: flex;
+  width: 100%;
   flex-direction: column;
   gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--learning-border);
+  border-radius: 8px;
+  background: var(--learning-surface-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
 }
 
-.context-agent strong,
-.context-item strong {
+.session-item:hover {
+  border-color: #b7d0f8;
+  background: #eef5ff;
+}
+
+.session-item.active {
+  border-color: var(--el-color-primary);
+  background: #eaf2ff;
+}
+
+.session-item strong {
   overflow: hidden;
   color: var(--learning-text);
   font-size: 11px;
@@ -140,69 +174,8 @@ watch(
   white-space: nowrap;
 }
 
-.context-agent span,
-.context-item span {
+.session-item span {
   color: var(--learning-text-muted);
   font-size: 9px;
-}
-
-.context-section {
-  padding: 15px 0 8px;
-}
-
-.context-label {
-  display: block;
-  margin-bottom: 9px;
-  color: var(--learning-text-muted);
-  font-size: 9px;
-}
-
-.context-state {
-  color: var(--learning-text-muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.error-state {
-  color: var(--el-color-danger);
-}
-
-.context-item {
-  gap: 8px;
-  padding: 9px;
-  border: 1px solid var(--learning-border);
-  border-radius: 8px;
-  background: var(--learning-surface-soft);
-}
-
-.context-item + .context-item {
-  margin-top: 8px;
-}
-
-.context-item > .el-icon {
-  flex: 0 0 auto;
-  color: var(--el-color-primary);
-}
-
-.permission-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--learning-border);
-}
-
-.permission-list > span:not(.context-label) {
-  gap: 5px;
-  color: var(--learning-text-secondary);
-  font-size: 10px;
-}
-
-.permission-list > span.disabled {
-  color: var(--learning-text-muted);
-}
-
-.permission-list .el-icon {
-  color: #36a26f;
 }
 </style>

@@ -6,9 +6,9 @@
         :key="componentKey"
         v-bind="currentComponentProps"
         @start="startNewSession"
-        @back="closeNewSession"
-        @start-chat="startChat"
-        @new-session="openNewSession()"
+        @start-chat="openChatWith"
+        @new-session="resetChatSession"
+        @select-session="openSession"
         @send="sendMessage"
         @open-agents="navigate('agents')"
         @open-assets="navigate('assets')"
@@ -33,7 +33,6 @@ import AnkiManager from './pages/AnkiManager.vue'
 import AnkiReview from './pages/AnkiReview.vue'
 import AssetManager from './pages/AssetManager.vue'
 import Home from './pages/Home.vue'
-import NewSession from './pages/NewSession.vue'
 import Settings from './pages/Settings.vue'
 import Statistics from './pages/Statistics.vue'
 
@@ -54,24 +53,23 @@ const pageComponents: Record<AppView, Component> = {
 }
 
 const activeView = ref<AppView>('home')
-const transientPage = ref<'new-session' | 'anki-creator' | null>(null)
-const initialAgent = ref<AgentType>()
+const transientPage = ref<'anki-creator' | null>(null)
+const pendingAgent = ref<AgentType>()
 const editingCard = ref<Card | null>(null)
 const newCardDeckPath = ref<string>()
 
 const {
+  sessions,
+  currentSessionId,
   currentSession,
   currentAgent,
   loading: chatLoading,
   startSession,
   sendMessage,
+  selectSession,
 } = useChatSessions()
 
 const currentComponent = computed(() => {
-  if (transientPage.value === 'new-session') {
-    return NewSession
-  }
-
   if (transientPage.value === 'anki-creator') {
     return AnkiCreator
   }
@@ -84,10 +82,6 @@ const componentKey = computed(() =>
 )
 
 const currentComponentProps = computed<Record<string, unknown>>(() => {
-  if (transientPage.value === 'new-session') {
-    return { initialAgent: initialAgent.value }
-  }
-
   if (transientPage.value === 'anki-creator') {
     return { editingCard: editingCard.value, initialDeckPath: newCardDeckPath.value }
   }
@@ -96,7 +90,10 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
     return {
       currentAgent: currentAgent.value,
       currentSession: currentSession.value,
+      currentSessionId: currentSessionId.value,
       loading: chatLoading.value,
+      initialAgent: pendingAgent.value,
+      sessions: sessions.value,
     }
   }
 
@@ -107,25 +104,49 @@ function navigate(view: AppView) {
   transientPage.value = null
   editingCard.value = null
   newCardDeckPath.value = undefined
+
+  if (view === 'chat') {
+    clearActiveSession()
+    pendingAgent.value = undefined
+  }
+
   activeView.value = view
 }
 
-function openNewSession(agent?: AgentType) {
-  activeView.value = 'chat'
-  initialAgent.value = agent
-  editingCard.value = null
-  newCardDeckPath.value = undefined
-  transientPage.value = 'new-session'
+// 回到新会话状态：不挂载任何会话，由左上的助手选择器决定下一步
+function clearActiveSession() {
+  currentSessionId.value = ''
+  currentAgent.value = ''
 }
 
-function startChat(agent: AgentType) {
-  openNewSession(agent)
+function openChatWith(agent: AgentType) {
+  editingCard.value = null
+  newCardDeckPath.value = undefined
+  transientPage.value = null
+  clearActiveSession()
+  pendingAgent.value = agent
+  activeView.value = 'chat'
 }
 
 async function startNewSession(agent: AgentType, question: string) {
   transientPage.value = null
+  pendingAgent.value = undefined
   activeView.value = 'chat'
   await startSession(agent, question)
+}
+
+function resetChatSession() {
+  clearActiveSession()
+  pendingAgent.value = undefined
+}
+
+async function openSession(sessionId: string) {
+  transientPage.value = null
+  editingCard.value = null
+  newCardDeckPath.value = undefined
+  pendingAgent.value = undefined
+  activeView.value = 'chat'
+  await selectSession(sessionId)
 }
 
 function openCardCreator(card?: Card, deckPath?: string) {
@@ -140,14 +161,6 @@ function closeTransientPage() {
   editingCard.value = null
   newCardDeckPath.value = undefined
   activeView.value = 'anki'
-}
-
-function closeNewSession() {
-  transientPage.value = null
-  initialAgent.value = undefined
-  editingCard.value = null
-  newCardDeckPath.value = undefined
-  activeView.value = 'chat'
 }
 </script>
 
