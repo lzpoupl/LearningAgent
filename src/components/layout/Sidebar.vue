@@ -11,6 +11,17 @@
         <template #title>{{ item.label }}</template>
       </el-menu-item>
     </el-menu>
+
+    <div class="sidebar-footer">
+      <el-tooltip :content="isDark ? '切换到浅色模式' : '切换到深色模式'" placement="right">
+        <el-button class="theme-toggle" circle plain size="small" @click="handleToggleTheme">
+          <el-icon>
+            <Sunny v-if="isDark" />
+            <Moon v-else />
+          </el-icon>
+        </el-button>
+      </el-tooltip>
+    </div>
   </aside>
 </template>
 
@@ -22,11 +33,14 @@ import {
   DataAnalysis,
   Document,
   HomeFilled,
+  Moon,
   Reading,
   Setting,
+  Sunny,
   User,
 } from '@element-plus/icons-vue'
 
+import { useTheme, persistTheme } from '../../composables/useTheme'
 import type { AppView } from '../../types/navigation'
 
 defineProps<{
@@ -36,6 +50,13 @@ defineProps<{
 const emit = defineEmits<{
   navigate: [view: AppView]
 }>()
+
+const { theme, isDark, toggleDark } = useTheme()
+
+function handleToggleTheme() {
+  toggleDark()
+  persistTheme(theme.value).catch(error => console.error(error))
+}
 
 const navigationItems: Array<{ id: AppView; label: string; icon: Component }> = [
   { id: 'home', label: '首页', icon: HomeFilled },
@@ -64,7 +85,7 @@ function handleNavigation(index: string) {
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--learning-border);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--learning-surface);
 }
 
 .brand-mark {
@@ -114,5 +135,19 @@ function handleNavigation(index: string) {
 
 .navigation-menu :deep(.el-menu-item.is-active .el-icon) {
   color: var(--el-color-primary);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 0 16px;
+}
+
+.theme-toggle {
+  color: var(--learning-text-secondary);
+}
+
+.theme-toggle:hover {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
 }
 </style>

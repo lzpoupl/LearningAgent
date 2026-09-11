@@ -238,7 +238,7 @@ watch(
   flex: 1;
   padding: 20px 22px;
   overflow-y: auto;
-  background: #fbfcfe;
+  background: var(--learning-surface-muted);
 }
 
 .message-list :deep(.el-empty) {

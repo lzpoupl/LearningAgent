@@ -290,11 +290,21 @@ pub fn delete_deck(conn: &Connection, deck_id: i64) -> Result<(), AnkiError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::repository::{anki, db};
+
     use super::*;
-    use crate::repository::{anki as card_repo, db};
 
     fn setup() -> Connection {
         db::open_in_memory().unwrap()
+    }
+
+    fn create_card(
+        conn: &Connection,
+        deck_id: i64,
+        front: &str,
+        back: &str,
+    ) -> Result<i64, AnkiError> {
+        anki::create_card_with_algorithm(conn, deck_id, front, back, "sm2")
     }
 
     /// 创建牌组并返回 (id, 规范化路径)。
@@ -397,8 +407,8 @@ mod tests {
         let child = make_deck(&conn, "/parent/child").0;
         make_deck(&conn, "/parent/child/grand");
         let other = make_deck(&conn, "/parent/other").0;
-        card_repo::create_card(&conn, child, "f1", "b1").unwrap();
-        card_repo::create_card(&conn, child, "f2", "b2").unwrap();
+        create_card(&conn, child, "f1", "b1").unwrap();
+        create_card(&conn, child, "f2", "b2").unwrap();
 
         let subs = list_subdecks(&conn, parent).unwrap();
         assert_eq!(subs.len(), 2);
@@ -457,7 +467,7 @@ mod tests {
         // 不对应任何牌组的卡片 id，确保测试的是“目标是卡片”而非 id 恰好撞车。
         let mut card_id = 0;
         for _ in 0..3 {
-            card_id = card_repo::create_card(&conn, host, "front", "back").unwrap();
+            card_id = create_card(&conn, host, "front", "back").unwrap();
         }
         let deck_exists: bool = conn
             .query_row(
@@ -497,9 +507,9 @@ mod tests {
         let child = make_deck(&conn, "/root/child").0;
         make_deck(&conn, "/root/child/grand");
         let sibling = make_deck(&conn, "/sibling").0;
-        card_repo::create_card(&conn, root, "rf", "rb").unwrap();
-        card_repo::create_card(&conn, child, "cf", "cb").unwrap();
-        card_repo::create_card(&conn, sibling, "sf", "sb").unwrap();
+        create_card(&conn, root, "rf", "rb").unwrap();
+        create_card(&conn, child, "cf", "cb").unwrap();
+        create_card(&conn, sibling, "sf", "sb").unwrap();
 
         delete_deck(&conn, root).unwrap();
 

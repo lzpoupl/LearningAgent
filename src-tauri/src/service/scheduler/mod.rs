@@ -8,24 +8,13 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 
+use crate::config::SchedulerConfig;
 use crate::interface::anki::{AnkiError, CardGrade, CardState};
 
 /// SM-2 算法标识。
 pub const SM2: &str = "sm2";
 /// FSRS 算法标识。
 pub const FSRS: &str = "fsrs";
-
-// ---------- 学习阶段步长（分钟）----------
-//
-// New / Learning 状态的卡片不经过具体算法，而是按固定步长推进。
-// 所有时间集中在此处，便于后续调整。
-
-/// 学习阶段答「重来」（Again）后的复习延时。
-pub const LEARNING_AGAIN_MINUTES: i64 = 1;
-/// 学习阶段答「困难」（Hard）后的复习延时。
-pub const LEARNING_HARD_MINUTES: i64 = 6;
-/// 学习阶段答「良好」（Good）后的复习延时，到期后进入 Review。
-pub const LEARNING_GOOD_MINUTES: i64 = 10;
 
 /// 卡片当前的记忆状态：算法无关阶段 + 算法私有状态。
 pub struct CardMemory {
@@ -110,21 +99,23 @@ impl Default for SchedulerRegistry {
 
 pub fn schedule(
     algorithm: &dyn SchedulingAlgorithm,
+    config: &SchedulerConfig,
     memory: CardMemory,
     grade: CardGrade,
     now: DateTime<Utc>,
 ) -> Result<SchedulingDecision, AnkiError> {
     match memory.state {
         CardState::New | CardState::Learning | CardState::Relearning => {
-            learning_step(algorithm, memory, grade, now)
+            learning_step(algorithm, config, memory, grade, now)
         }
-        CardState::Review => review_step(algorithm, memory, grade, now),
+        CardState::Review => review_step(algorithm, config, memory, grade, now),
     }
 }
 
-/// 学习阶段：使用固定步长，算法私有状态保持不变。
+/// 学习阶段：使用配置的固定步长，算法私有状态保持不变。
 fn learning_step(
     algorithm: &dyn SchedulingAlgorithm,
+    config: &SchedulerConfig,
     memory: CardMemory,
     grade: CardGrade,
     now: DateTime<Utc>,
@@ -132,17 +123,17 @@ fn learning_step(
     match grade {
         CardGrade::Again => Ok(SchedulingDecision {
             state: CardState::Learning,
-            due_at: now + Duration::minutes(LEARNING_AGAIN_MINUTES),
+            due_at: now + Duration::minutes(config.learning_again_minutes),
             algorithm_state: preserved_algorithm_state(algorithm, &memory),
         }),
         CardGrade::Hard => Ok(SchedulingDecision {
             state: CardState::Learning,
-            due_at: now + Duration::minutes(LEARNING_HARD_MINUTES),
+            due_at: now + Duration::minutes(config.learning_hard_minutes),
             algorithm_state: preserved_algorithm_state(algorithm, &memory),
         }),
         CardGrade::Good => Ok(SchedulingDecision {
             state: CardState::Review,
-            due_at: now + Duration::minutes(LEARNING_GOOD_MINUTES),
+            due_at: now + Duration::minutes(config.learning_good_minutes),
             algorithm_state: preserved_algorithm_state(algorithm, &memory),
         }),
         // Easy 直接毕业进入 Review，间隔交由具体算法计算。
@@ -160,6 +151,7 @@ fn learning_step(
 /// 复习阶段：由具体算法安排；Again 时额外回到 Learning。
 fn review_step(
     algorithm: &dyn SchedulingAlgorithm,
+    config: &SchedulerConfig,
     memory: CardMemory,
     grade: CardGrade,
     now: DateTime<Utc>,
@@ -170,7 +162,7 @@ fn review_step(
         // 遗忘：算法已记录本次遗忘，状态机让卡片立即回到学习阶段重学。
         CardGrade::Again => (
             CardState::Learning,
-            now + Duration::minutes(LEARNING_AGAIN_MINUTES),
+            now + Duration::minutes(config.learning_again_minutes),
         ),
         _ => (CardState::Review, outcome.due_at),
     };
@@ -196,10 +188,15 @@ fn preserved_algorithm_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SchedulerConfig;
     use chrono::{TimeZone, Utc};
 
     fn now() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap()
+    }
+
+    fn scheduler() -> SchedulerConfig {
+        SchedulerConfig::default()
     }
 
     fn schedule_from(
@@ -209,6 +206,7 @@ mod tests {
     ) -> SchedulingDecision {
         schedule(
             &sm2::Sm2,
+            &scheduler(),
             CardMemory {
                 state,
                 algorithm_state,
@@ -225,29 +223,53 @@ mod tests {
 
     #[test]
     fn new_card_uses_learning_steps() {
+        let config = scheduler();
         let again = schedule_from(CardState::New, None, CardGrade::Again);
         assert_eq!(again.state, CardState::Learning);
-        assert_eq!(minutes(&again), LEARNING_AGAIN_MINUTES);
+        assert_eq!(minutes(&again), config.learning_again_minutes);
 
         let hard = schedule_from(CardState::New, None, CardGrade::Hard);
         assert_eq!(hard.state, CardState::Learning);
-        assert_eq!(minutes(&hard), LEARNING_HARD_MINUTES);
+        assert_eq!(minutes(&hard), config.learning_hard_minutes);
 
         let good = schedule_from(CardState::New, None, CardGrade::Good);
         assert_eq!(good.state, CardState::Review);
-        assert_eq!(minutes(&good), LEARNING_GOOD_MINUTES);
+        assert_eq!(minutes(&good), config.learning_good_minutes);
     }
 
     #[test]
     fn learning_again_and_hard_stay_in_learning() {
+        let config = scheduler();
         for (grade, expected) in [
-            (CardGrade::Again, LEARNING_AGAIN_MINUTES),
-            (CardGrade::Hard, LEARNING_HARD_MINUTES),
+            (CardGrade::Again, config.learning_again_minutes),
+            (CardGrade::Hard, config.learning_hard_minutes),
         ] {
             let decision = schedule_from(CardState::Learning, None, grade);
             assert_eq!(decision.state, CardState::Learning);
             assert_eq!(minutes(&decision), expected);
         }
+    }
+
+    #[test]
+    fn learning_steps_follow_config() {
+        let custom = SchedulerConfig {
+            learning_again_minutes: 3,
+            learning_hard_minutes: 12,
+            learning_good_minutes: 20,
+            ..SchedulerConfig::default()
+        };
+        let decision = schedule(
+            &sm2::Sm2,
+            &custom,
+            CardMemory {
+                state: CardState::New,
+                algorithm_state: None,
+            },
+            CardGrade::Hard,
+            now(),
+        )
+        .unwrap();
+        assert_eq!(minutes(&decision), 12);
     }
 
     #[test]
@@ -276,7 +298,7 @@ mod tests {
 
         let decision = schedule_from(CardState::Review, Some(state), CardGrade::Again);
         assert_eq!(decision.state, CardState::Learning);
-        assert_eq!(minutes(&decision), LEARNING_AGAIN_MINUTES);
+        assert_eq!(minutes(&decision), scheduler().learning_again_minutes);
 
         let next: sm2::Sm2State = serde_json::from_value(decision.algorithm_state.clone()).unwrap();
         assert_eq!(next.repetitions, 0, "算法应记录本次遗忘");

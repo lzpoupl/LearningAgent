@@ -585,14 +585,15 @@ textarea:focus {
 .anki-page .refresh-button:hover,
 .anki-page .icon-button:hover,
 .anki-page .image-button:hover {
-  border-color: #b7d0f8;
-  background: #eef5ff;
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
   color: var(--learning-primary);
 }
 
 .anki-page .editor-panel,
 .anki-page .preview-panel {
   border-color: var(--learning-border);
+  background: var(--learning-surface);
 }
 
 .anki-page .field-label {
@@ -624,7 +625,7 @@ textarea:focus {
 }
 
 .anki-page .secondary-button {
-  background: #eaf2ff;
+  background: var(--el-color-primary-light-9);
   color: var(--learning-primary);
 }
 
@@ -661,6 +662,6 @@ textarea:focus {
 }
 
 .anki-page .note-mark {
-  color: #8db7f4;
+  color: var(--learning-primary);
 }
 </style>

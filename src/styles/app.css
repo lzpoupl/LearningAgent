@@ -3,14 +3,37 @@
   --learning-bg: #f5f8fc;
   --learning-surface: #ffffff;
   --learning-surface-muted: #f7f9fc;
+  --learning-surface-soft: #fafcff;
   --learning-text: #17233b;
   --learning-text-secondary: #64748b;
   --learning-text-muted: #94a3b8;
   --learning-border: #e5ebf3;
+  --learning-border-soft: #eef2f7;
   --learning-shadow: 0 8px 30px rgba(35, 75, 130, 0.07);
 
   --el-color-primary: var(--learning-primary);
   --el-border-radius-base: 8px;
+}
+
+html.dark {
+  --learning-bg: #0f1216;
+  --learning-surface: #171b21;
+  --learning-surface-muted: #1e232b;
+  --learning-surface-soft: #14181e;
+  --learning-text: #e6eaf1;
+  --learning-text-secondary: #a7aebc;
+  --learning-text-muted: #6d7686;
+  --learning-border: #2a3038;
+  --learning-border-soft: #232830;
+  --learning-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+
+  --el-color-primary: var(--learning-primary);
+  --el-color-primary-light-3: #2064c4;
+  --el-color-primary-light-5: #1b4f97;
+  --el-color-primary-light-7: #163a6b;
+  --el-color-primary-light-8: #132f56;
+  --el-color-primary-light-9: #17202c;
+  --el-color-primary-dark-2: #5395f7;
 }
 
 * {
@@ -24,6 +47,10 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+}
+
+html {
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 body {
@@ -43,4 +70,13 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+/* 深色模式下滚动条与原生控件跟随主题 */
+html.dark ::-webkit-scrollbar-thumb {
+  background: var(--learning-border);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--learning-text-muted);
 }

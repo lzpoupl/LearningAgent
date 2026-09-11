@@ -58,6 +58,6 @@ pre {
   font-size: 10px;
   line-height: 1.6;
   overflow-x: auto;
-  color: #444;
+  color: var(--learning-text-secondary);
 }
 </style>

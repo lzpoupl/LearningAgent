@@ -528,10 +528,34 @@ h2 {
   }
 }
 
+.statistics-page .summary-card,
+.statistics-page .chart-section,
+.statistics-page .detail-panel {
+  background: var(--learning-surface);
+}
+
+.statistics-page .featured-card,
+.statistics-page .insight-panel {
+  border-color: var(--el-color-primary-light-7);
+  background: var(--el-color-primary-light-9);
+}
+
+.statistics-page .insight-panel p {
+  color: var(--learning-text-secondary);
+}
+
+.statistics-page .load-error {
+  border-color: var(--el-color-danger-light-7);
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+
 .statistics-page .date-label,
 .statistics-page .summary-label,
 .statistics-page .summary-foot,
+.statistics-page .summary-value span,
 .statistics-page .chart-total,
+.statistics-page .y-axis,
 .statistics-page .bar-value,
 .statistics-page .bar-day,
 .statistics-page .focus-info span,
@@ -546,10 +570,14 @@ h2 {
   color: var(--learning-text);
 }
 
+.statistics-page .bar-chart {
+  border-color: var(--learning-border);
+}
+
 .statistics-page .progress-track,
 .statistics-page .focus-meter,
 .statistics-page .bar-track {
-  background: #e8eef7;
+  background: var(--learning-border-soft);
 }
 
 .statistics-page .progress-track span,
@@ -560,7 +588,7 @@ h2 {
 }
 
 .statistics-page .streak-dot {
-  background: #8db7f4;
+  background: var(--el-color-primary-light-3);
 }
 
 .statistics-page .trend-up,
@@ -569,13 +597,9 @@ h2 {
 }
 
 .statistics-page .focus-icon.math,
+.statistics-page .focus-icon.english,
 .statistics-page .focus-icon.anki {
-  background: #eaf2ff;
+  background: var(--el-color-primary-light-9);
   color: var(--learning-primary);
-}
-
-.statistics-page .focus-icon.english {
-  background: #e6f4ff;
-  color: #1677b8;
 }
 </style>

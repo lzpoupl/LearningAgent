@@ -85,7 +85,7 @@ defineEmits<{
 }
 
 .card-side--back {
-  border-left: 1px solid #eeeae4;
+  border-left: 1px solid var(--learning-border);
   background: var(--learning-surface-muted);
 }
 
@@ -100,7 +100,7 @@ defineEmits<{
   max-height: 150px;
   margin-top: 10px;
   overflow: hidden;
-  color: #49443d;
+  color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 15px;
   line-height: 1.5;
@@ -133,7 +133,7 @@ defineEmits<{
   margin: 0 0 8px;
   padding: 8px;
   border-radius: 4px;
-  background: #eeeae4;
+  background: var(--learning-border-soft);
   font-family: Consolas, monospace;
   font-size: 11px;
 }
@@ -171,7 +171,7 @@ defineEmits<{
 
 .rendered-card-content {
   margin-top: 12px;
-  color: #403a33;
+  color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 17px;
   line-height: 1.6;
@@ -203,7 +203,7 @@ defineEmits<{
   overflow-x: auto;
   padding: 10px;
   border-radius: 5px;
-  background: #ebe7e0;
+  background: var(--learning-border-soft);
   font-family: Consolas, monospace;
   font-size: 13px;
 }
@@ -239,7 +239,7 @@ defineEmits<{
   right: 0;
   left: 0;
   height: 1px;
-  background: #d9e7f8;
+  background: var(--learning-border);
   content: '';
 }
 
@@ -269,7 +269,7 @@ defineEmits<{
   border: 1px solid var(--learning-border);
   border-radius: 10px;
   background: var(--learning-surface);
-  box-shadow: 0 16px 42px rgba(49, 41, 32, 0.1);
+  box-shadow: var(--learning-shadow);
   text-align: center;
 }
 
@@ -288,7 +288,7 @@ defineEmits<{
 .review-content {
   width: 100%;
   margin-top: 18px;
-  color: #49443d;
+  color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: clamp(18px, 2.6vw, 29px);
   line-height: 1.55;
@@ -338,7 +338,7 @@ defineEmits<{
   align-items: center;
   justify-content: center;
   background: var(--learning-surface);
-  color: #9a948b;
+  color: var(--learning-text-muted);
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -349,7 +349,7 @@ defineEmits<{
   right: 32px;
   left: 32px;
   height: 1px;
-  background: #eeeae4;
+  background: var(--learning-border);
   content: '';
 }
 
@@ -374,7 +374,7 @@ defineEmits<{
   }
 
   .card-side--back {
-    border-top: 1px solid #eeeae4;
+    border-top: 1px solid var(--learning-border);
     border-left: 0;
   }
 }

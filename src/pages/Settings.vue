@@ -63,7 +63,7 @@
               <el-radio-button label="dark">深色</el-radio-button>
               <el-radio-button label="mountain">自定义</el-radio-button>
             </el-radio-group>
-            <p class="section-hint">主题切换入口已预留，当前界面使用浅色学习工作台。</p>
+            <p class="section-hint">深色模式基于 Element Plus 主题变量实现，切换后立即生效，并会随设置一同保存。</p>
           </section>
         </el-tab-pane>
 
@@ -99,6 +99,7 @@ import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 import PageHeader from '../components/common/PageHeader.vue'
+import { useTheme } from '../composables/useTheme'
 import { getSettings, updateSettings } from '../services/settings'
 import type { UserSettings } from '../types/settings'
 
@@ -109,6 +110,8 @@ const subjectInput = ref<{ focus: () => void } | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
+
+const { theme, setTheme } = useTheme()
 
 const settings = reactive<UserSettings>({
   goal: '',
@@ -173,6 +176,11 @@ watch(addingSubject, visible => {
   if (visible) {
     void nextTick(() => subjectInput.value?.focus())
   }
+})
+
+watch(() => settings.theme, nextTheme => setTheme(nextTheme))
+watch(theme, nextTheme => {
+  settings.theme = nextTheme
 })
 
 onMounted(loadSettings)

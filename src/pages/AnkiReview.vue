@@ -487,6 +487,20 @@ h1 {
   }
 }
 
+.review-page .review-header,
+.review-page .review-footer,
+.review-page .deck-menu,
+.review-page .grade-button {
+  background: var(--learning-surface);
+}
+
+.review-page .review-header,
+.review-page .review-footer,
+.review-page .deck-menu,
+.review-page .grade-button {
+  border-color: var(--learning-border);
+}
+
 .review-page .deck-option-icon,
 .review-page .deck-option small,
 .review-page .card-position,
@@ -495,12 +509,30 @@ h1 {
   color: var(--learning-text-muted);
 }
 
+.review-page .deck-option,
+.review-page .grade-button {
+  color: var(--learning-text);
+}
+
 .review-page .review-message strong {
   color: var(--learning-primary);
 }
 
+.review-page .error-message {
+  color: var(--el-color-danger);
+}
+
+.review-page .deck-option:hover,
+.review-page .tool-button:hover,
+.review-page .edit-button:hover,
+.review-page .more-button:hover,
 .review-page .grade-button:hover:not(:disabled) {
-  background: #eef5ff;
+  background: var(--el-color-primary-light-9);
+  color: var(--learning-primary);
+}
+
+.review-page .deck-menu {
+  box-shadow: var(--learning-shadow);
 }
 
 .review-page .grade-button.again,

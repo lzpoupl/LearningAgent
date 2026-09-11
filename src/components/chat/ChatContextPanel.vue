@@ -172,7 +172,7 @@ watch(
   padding: 9px;
   border: 1px solid var(--learning-border);
   border-radius: 8px;
-  background: #fafcff;
+  background: var(--learning-surface-soft);
 }
 
 .context-item + .context-item {

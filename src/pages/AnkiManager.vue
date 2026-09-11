@@ -490,7 +490,7 @@ async function moveSelectedCard() {
     await moveCard(movingCard.value.id, moveTargetPath.value)
     movingCard.value = null
     ElMessage.success('卡片已移动。')
-    await loadCards()
+    await reloadDecks()
   } catch (error) {
     console.error(error)
     ElMessage.error('卡片移动失败，请重试。')
@@ -508,7 +508,7 @@ async function deleteCardItem(card: Card) {
   try {
     await deleteCard(card.id)
     ElMessage.success('卡片已删除。')
-    await loadCards()
+    await reloadDecks()
   } catch (error) {
     console.error(error)
     ElMessage.error('卡片删除失败，请重试。')
@@ -954,12 +954,27 @@ h2 {
   }
 }
 
+.manager-page .deck-panel,
+.manager-page .cards-panel,
+.manager-page .card-item,
+.manager-page .modal {
+  background: var(--learning-surface);
+}
+
 .manager-page .count-label,
 .manager-page .card-meta,
 .manager-page .modal-hint,
 .manager-page .state-message,
-.manager-page .cards-state {
+.manager-page .cards-state,
+.manager-page .deck-card-count,
+.manager-page .preview-meta,
+.manager-page .review-actions {
   color: var(--learning-text-muted);
+}
+
+.manager-page .empty-state strong,
+.manager-page .empty-cards strong {
+  color: var(--learning-text);
 }
 
 .manager-page .deck-icon,
@@ -967,31 +982,50 @@ h2 {
   color: var(--learning-primary);
 }
 
-.manager-page .card-item {
+.manager-page .card-item,
+.manager-page .card-meta,
+.manager-page .deck-tree .all-cards-row {
   border-color: var(--learning-border);
+}
+
+.manager-page .deck-tree .all-cards-row {
+  color: var(--learning-text);
 }
 
 .manager-page .review-actions {
   background: var(--learning-surface-muted);
 }
 
+.manager-page .deck-tree-inner :deep(.el-tree-node__content:hover),
+.manager-page .deck-tree-inner :deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: var(--el-color-primary-light-9);
+}
+
 .manager-page .state-new {
-  background: #eef2f7;
-  color: #64748b;
+  background: var(--learning-surface-muted);
+  color: var(--learning-text-secondary);
 }
 
 .manager-page .state-learning,
 .manager-page .state-relearning {
-  background: #eaf2ff;
-  color: #1d64c8;
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
 }
 
 .manager-page .state-review {
-  background: #e6f4ff;
-  color: #1677b8;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
 }
 
 .manager-page .modal-backdrop {
   background: rgba(15, 35, 65, 0.38);
+}
+
+html.dark .manager-page .modal-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+html.dark .manager-page .modal {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 </style>

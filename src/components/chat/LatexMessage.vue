@@ -43,7 +43,7 @@ watch(
 .latex-container {
   margin: 12px 0;
   padding: 16px;
-  background: #f8f9fa;
+  background: var(--learning-surface-muted);
   border-radius: 8px;
   overflow-x: auto;
 }

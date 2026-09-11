@@ -214,7 +214,7 @@ const circleStyle = computed(() => {
       : 0
 
   return {
-    background: `conic-gradient(var(--primary) 0 ${percent}%, #e8eff8 ${percent}% 100%)`
+    background: `conic-gradient(var(--primary) 0 ${percent}%, var(--track) ${percent}% 100%)`
   }
 })
 
@@ -290,6 +290,7 @@ onMounted(loadStats)
   --text-3: #94a3b8;
 
   --border: #e5ebf3;
+  --track: #e8eff8;
 
   --radius: 14px;
   --shadow: 0 8px 30px rgba(35, 75, 130, 0.07);
@@ -574,6 +575,55 @@ onMounted(loadStats)
 
 .home-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+html.dark .home-page {
+  --primary-light: #17263d;
+  --bg: #0f1216;
+  --surface: #171b21;
+  --text: #e6eaf1;
+  --text-2: #a7aebc;
+  --text-3: #6d7686;
+  --border: #2a3038;
+  --track: #232832;
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+}
+
+html.dark .home-page .hero {
+  color: #e6eaf1;
+  background: linear-gradient(105deg, #17233a 0%, #182538 52%, #1a2540 100%);
+}
+
+html.dark .home-page .hero p {
+  color: #9fb0c8;
+}
+
+html.dark .home-page .quick-icon.blue {
+  background: #17263d;
+  color: #6fa8f8;
+}
+
+html.dark .home-page .quick-icon.green {
+  background: #16281f;
+  color: #5fbf92;
+}
+
+html.dark .home-page .quick-icon.purple {
+  background: #221c38;
+  color: #a98ff0;
+}
+
+html.dark .home-page .quick-icon.orange {
+  background: #2c2314;
+  color: #e0a94a;
+}
+
+html.dark .home-page .task {
+  border-bottom-color: var(--learning-border);
+}
+
+html.dark .home-page .home-scroll::-webkit-scrollbar-thumb {
+  background: var(--learning-border);
 }
 
 @media (max-width: 1000px) {

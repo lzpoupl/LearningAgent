@@ -1,3 +1,4 @@
+use crate::config::SchedulerConfig;
 use crate::interface::anki::*;
 use crate::AppState;
 
@@ -119,6 +120,21 @@ pub fn anki_delete_card(
     state.anki.delete_card(&card_id)
 }
 
+#[tauri::command]
+pub fn anki_get_scheduler_config(
+    state: tauri::State<'_, AppState>,
+) -> Result<SchedulerConfig, AnkiError> {
+    Ok(state.config.anki().scheduler)
+}
+
+#[tauri::command]
+pub fn anki_update_scheduler_config(
+    state: tauri::State<'_, AppState>,
+    scheduler: SchedulerConfig,
+) -> Result<SchedulerConfig, AnkiError> {
+    state.anki.update_scheduler_config(scheduler)
+}
+
 #[macro_export]
 macro_rules! anki_handlers {
     () => {
@@ -137,6 +153,8 @@ macro_rules! anki_handlers {
             crate::controller::anki::anki_update_card_content,
             crate::controller::anki::anki_delete_deck,
             crate::controller::anki::anki_delete_card,
+            crate::controller::anki::anki_get_scheduler_config,
+            crate::controller::anki::anki_update_scheduler_config,
         ]
     };
 }

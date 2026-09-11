@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::{DateTime, Utc};
 
+use crate::config::{ConfigHandle, SchedulerConfig};
 use crate::interface::anki::{
     AnkiError, Card, CardGrade, CardQuery, CardSearch, CardState, Deck, NewCard, ReviewOption,
     ReviewOutcome, UpdateCardContent,
@@ -13,15 +14,25 @@ use crate::repository::deck as deck_repo;
 
 use super::scheduler::{schedule, CardMemory, SchedulerRegistry, SchedulingAlgorithm, SM2};
 
-/// Anki 服务：拥有数据库连接与算法注册表，在应用启动时构建一次，之后由各命令共享。
+/// Anki 服务：拥有数据库连接、算法注册表与配置句柄，在应用启动时构建一次，
+/// 之后由各命令共享。
 pub struct AnkiService {
     db: Arc<Mutex<rusqlite::Connection>>,
     schedulers: Arc<SchedulerRegistry>,
+    config: ConfigHandle,
 }
 
 impl AnkiService {
-    pub fn new(db: Arc<Mutex<rusqlite::Connection>>, schedulers: Arc<SchedulerRegistry>) -> Self {
-        Self { db, schedulers }
+    pub fn new(
+        db: Arc<Mutex<rusqlite::Connection>>,
+        schedulers: Arc<SchedulerRegistry>,
+        config: ConfigHandle,
+    ) -> Self {
+        Self {
+            db,
+            schedulers,
+            config,
+        }
     }
 
     /// 获取数据库连接锁；锁在方法内部持有，命令层无需关心并发细节。
@@ -63,10 +74,17 @@ impl AnkiService {
     }
 
     pub fn create_card(&self, new_card: NewCard) -> Result<String, AnkiError> {
+        let algorithm = self.config.anki().scheduler.algorithm;
         let conn = self.conn()?;
         let deck_id = Self::resolve_deck_id(&conn, &new_card.deck_path)?;
         Self::ensure_concrete_deck(deck_id, &new_card.deck_path)?;
-        let id = card_repo::create_card(&conn, deck_id, &new_card.front, &new_card.back)?;
+        let id = card_repo::create_card_with_algorithm(
+            &conn,
+            deck_id,
+            &new_card.front,
+            &new_card.back,
+            &algorithm,
+        )?;
         Ok(id.to_string())
     }
 
@@ -109,6 +127,7 @@ impl AnkiService {
 
     /// 对卡片作答（重来/困难/良好/简单），计算并持久化下一次复习安排。
     pub fn grade_card(&self, card_id: &str, grade: CardGrade) -> Result<ReviewOutcome, AnkiError> {
+        let scheduler = self.config.anki().scheduler;
         let conn = self.conn()?;
         let id = Self::parse_id(card_id)?;
         let record =
@@ -126,7 +145,13 @@ impl AnkiService {
             algorithm_state: Self::parse_algorithm_state(scheduler_state, card_id)?,
         };
 
-        let decision = schedule(algorithm_impl.as_ref(), memory, grade, Utc::now())?;
+        let decision = schedule(
+            algorithm_impl.as_ref(),
+            &scheduler,
+            memory,
+            grade,
+            Utc::now(),
+        )?;
 
         let due_at = decision.due_at.to_rfc3339();
         let next = card_repo::ScheduleRecord {
@@ -151,6 +176,7 @@ impl AnkiService {
 
     /// 预演四种作答等级，返回每种等级对应的下次复习安排，用于展示复习选项。
     pub fn get_review_options(&self, card_id: &str) -> Result<Vec<ReviewOption>, AnkiError> {
+        let scheduler = self.config.anki().scheduler;
         let conn = self.conn()?;
         let id = Self::parse_id(card_id)?;
         let record =
@@ -177,6 +203,7 @@ impl AnkiService {
         for grade in grades {
             let decision = schedule(
                 algorithm.as_ref(),
+                &scheduler,
                 CardMemory {
                     state,
                     algorithm_state: memory_state.clone(),
@@ -222,12 +249,37 @@ impl AnkiService {
         })
     }
 
+    // ---------- 配置用例 ----------
+
+    /// 校验算法名是否已注册。
+    pub fn supports_algorithm(&self, name: &str) -> bool {
+        self.schedulers.get(name).is_some()
+    }
+
+    /// 更新复习调度配置；算法名必须已在注册表中注册。
+    pub fn update_scheduler_config(
+        &self,
+        scheduler: SchedulerConfig,
+    ) -> Result<SchedulerConfig, AnkiError> {
+        if !self.supports_algorithm(&scheduler.algorithm) {
+            return Err(AnkiError {
+                code: "invalid_algorithm".into(),
+                message: format!("未注册的调度算法: {}", scheduler.algorithm),
+            });
+        }
+        self.config.set_scheduler(scheduler.clone());
+        Ok(scheduler)
+    }
+
     // ---------- 内部辅助 ----------
 
     fn algorithm_for(&self, name: &str) -> Arc<dyn SchedulingAlgorithm> {
+        let configured = self.config.anki().scheduler.algorithm;
         self.schedulers
             .get(name)
-            .unwrap_or_else(|| self.schedulers.get(SM2).expect("默认算法 sm2 必须已注册"))
+            .or_else(|| self.schedulers.get(configured.as_str()))
+            .or_else(|| self.schedulers.get(SM2))
+            .expect("默认算法 sm2 必须已注册")
     }
 
     fn parse_id(card_id: &str) -> Result<i64, AnkiError> {
@@ -311,14 +363,30 @@ fn format_interval(due_at: DateTime<Utc>, now: DateTime<Utc>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::*;
+    use crate::config::{AppConfig, ConfigHandle};
     use crate::repository::{anki as card_repo, db, deck as deck_repo};
     use crate::service::scheduler::SchedulerRegistry;
+
+    fn handle() -> ConfigHandle {
+        ConfigHandle::new(AppConfig::default())
+    }
+
+    fn create_card(
+        conn: &Connection,
+        deck_id: i64,
+        front: &str,
+        back: &str,
+    ) -> Result<i64, AnkiError> {
+        card_repo::create_card_with_algorithm(conn, deck_id, front, back, "sm2")
+    }
 
     fn setup_service(algorithm: &str) -> (AnkiService, Arc<Mutex<rusqlite::Connection>>, String) {
         let conn = db::open_in_memory().unwrap();
         let deck = deck_repo::create_deck(&conn, "/测试").unwrap();
-        let card_id = card_repo::create_card(
+        let card_id = create_card(
             &conn,
             deck_repo::resolve_deck(&conn, &deck).unwrap().unwrap(),
             "front",
@@ -331,8 +399,23 @@ mod tests {
         )
         .unwrap();
         let db = Arc::new(Mutex::new(conn));
-        let service = AnkiService::new(db.clone(), Arc::new(SchedulerRegistry::new()));
+        let service = AnkiService::new(db.clone(), Arc::new(SchedulerRegistry::new()), handle());
         (service, db, card_id.to_string())
+    }
+
+    fn setup_with_config(
+        config: AppConfig,
+    ) -> (AnkiService, Arc<Mutex<rusqlite::Connection>>, ConfigHandle) {
+        let conn = db::open_in_memory().unwrap();
+        deck_repo::create_deck(&conn, "/测试").unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        let config = ConfigHandle::new(config);
+        let service = AnkiService::new(
+            db.clone(),
+            Arc::new(SchedulerRegistry::new()),
+            config.clone(),
+        );
+        (service, db, config)
     }
 
     #[test]
@@ -451,5 +534,45 @@ mod tests {
         assert_eq!(schedule.state, CardState::New);
         assert!(schedule.due_at.is_none());
         assert!(schedule.scheduler_state.is_some());
+    }
+
+    #[test]
+    fn create_card_uses_configured_algorithm() {
+        let mut config = AppConfig::default();
+        config.anki.scheduler.algorithm = "fsrs".to_string();
+        let (service, db, _) = setup_with_config(config);
+
+        let card_id = service
+            .create_card(NewCard {
+                deck_path: "/测试".into(),
+                front: "f".into(),
+                back: "b".into(),
+            })
+            .unwrap();
+
+        let conn = db.lock().unwrap();
+        let schedule = card_repo::find_schedule(&conn, card_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(schedule.algorithm, "fsrs");
+    }
+
+    #[test]
+    fn update_scheduler_config_validates_and_persists() {
+        let (service, _, config) = setup_with_config(AppConfig::default());
+
+        let mut scheduler = config.anki().scheduler;
+        scheduler.algorithm = "fsrs".into();
+        scheduler.learning_good_minutes = 30;
+        service.update_scheduler_config(scheduler).unwrap();
+        assert_eq!(config.anki().scheduler.algorithm, "fsrs");
+        assert_eq!(config.anki().scheduler.learning_good_minutes, 30);
+
+        let mut unknown = config.anki().scheduler;
+        unknown.algorithm = "unknown".into();
+        assert_eq!(
+            service.update_scheduler_config(unknown).unwrap_err().code,
+            "invalid_algorithm"
+        );
     }
 }

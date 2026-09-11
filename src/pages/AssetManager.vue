@@ -808,8 +808,27 @@ button {
   border-bottom-color: var(--learning-border);
 }
 
+.materials-page .subject-picker:hover,
+.materials-page .subject-picker:focus {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.materials-page .subject-tree :deep(.el-tree-node__content:hover),
+.materials-page .subject-tree :deep(.is-current > .el-tree-node__content) {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.materials-page .target-folder code {
+  background: var(--el-color-primary-light-9);
+  color: var(--learning-primary);
+}
+
 .materials-page .material-card {
   border-color: var(--learning-border);
+  background: var(--learning-surface);
   box-shadow: var(--learning-shadow);
 }
 
@@ -818,38 +837,38 @@ button {
 }
 
 .materials-page .material-cover {
-  background: #eaf2ff;
-  color: var(--learning-primary);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
 }
 
 .materials-page .cover-pdf {
-  background: #fef0f0;
-  color: #f56c6c;
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
 }
 
 .materials-page .cover-slides {
-  background: #fdf6ec;
-  color: #e6a23c;
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
 }
 
 .materials-page .cover-word {
-  background: #ecf5ff;
-  color: #409eff;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
 }
 
 .materials-page .cover-note {
-  background: #f0f9eb;
-  color: #67c23a;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
 }
 
 .materials-page .cover-image {
-  background: #f4f4f5;
-  color: #909399;
+  background: var(--el-color-info-light-9);
+  color: var(--el-color-info);
 }
 
 .materials-page .cover-document {
-  background: #f4f4f5;
-  color: #606266;
+  background: var(--el-color-info-light-9);
+  color: var(--el-color-info);
 }
 
 .materials-page .material-subject {
@@ -861,8 +880,8 @@ button {
 }
 
 .materials-page .empty-materials {
-  border-color: #b7d0f8;
-  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--learning-border);
+  background: var(--learning-surface-soft);
 }
 
 .materials-page .material-actions {
@@ -879,7 +898,7 @@ button {
 }
 
 .materials-page .material-open-button:hover {
-  background: #eaf2ff;
+  background: var(--el-color-primary-light-9);
   color: var(--learning-primary);
 }
 
@@ -901,53 +920,53 @@ button {
 
 .materials-page .material-subject.format-accent-pdf,
 .materials-page .material-open-button.format-accent-pdf {
-  color: #f56c6c;
+  color: var(--el-color-danger);
 }
 
 .materials-page .material-subject.format-accent-slides,
 .materials-page .material-open-button.format-accent-slides {
-  color: #e6a23c;
+  color: var(--el-color-warning);
 }
 
 .materials-page .material-subject.format-accent-word,
 .materials-page .material-open-button.format-accent-word {
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 
 .materials-page .material-subject.format-accent-note,
 .materials-page .material-open-button.format-accent-note {
-  color: #67c23a;
+  color: var(--el-color-success);
 }
 
 .materials-page .material-subject.format-accent-image,
 .materials-page .material-open-button.format-accent-image {
-  color: #909399;
+  color: var(--el-color-info);
 }
 
 .materials-page .material-subject.format-accent-document,
 .materials-page .material-open-button.format-accent-document {
-  color: #606266;
+  color: var(--el-color-info);
 }
 
 .materials-page .material-open-button.format-accent-pdf:hover {
-  background: #fef0f0;
+  background: var(--el-color-danger-light-9);
 }
 
 .materials-page .material-open-button.format-accent-slides:hover {
-  background: #fdf6ec;
+  background: var(--el-color-warning-light-9);
 }
 
 .materials-page .material-open-button.format-accent-word:hover {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9);
 }
 
 .materials-page .material-open-button.format-accent-note:hover {
-  background: #f0f9eb;
+  background: var(--el-color-success-light-9);
 }
 
 .materials-page .material-open-button.format-accent-image:hover,
 .materials-page .material-open-button.format-accent-document:hover {
-  background: #f4f4f5;
+  background: var(--el-color-info-light-9);
 }
 
 .materials-page .feedback {

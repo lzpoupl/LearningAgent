@@ -146,8 +146,10 @@ fn read_card_rows(
     params: Vec<Box<dyn rusqlite::ToSql>>,
 ) -> Result<Vec<CardRow>, AnkiError> {
     let mut stmt = conn.prepare(sql).map_err(map_rusqlite)?;
-    let param_refs: Vec<&dyn rusqlite::ToSql> =
-        params.iter().map(|b| &**b as &dyn rusqlite::ToSql).collect();
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params
+        .iter()
+        .map(|b| &**b as &dyn rusqlite::ToSql)
+        .collect();
     let rows = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok(CardRow {
@@ -242,29 +244,26 @@ pub fn list_cards(
         .collect()
 }
 
-/// 新建一张卡片（初始为 new 状态），返回新卡片 id。
-pub fn create_card(
+/// 新建一张卡片（初始为 new 状态），使用指定调度算法，返回新卡片 id。
+pub fn create_card_with_algorithm(
     conn: &Connection,
     deck_id: i64,
     front: &str,
     back: &str,
+    algorithm: &str,
 ) -> Result<i64, AnkiError> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
-        "INSERT INTO card (deck_id, front, back, state, due_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, 'new', NULL, ?4, ?5)",
-        rusqlite::params![deck_id, front, back, now, now],
+        "INSERT INTO card (deck_id, front, back, state, due_at, algorithm, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'new', NULL, ?4, ?5, ?6)",
+        rusqlite::params![deck_id, front, back, algorithm, now, now],
     )
     .map_err(map_rusqlite)?;
     Ok(conn.last_insert_rowid())
 }
 
 /// 把卡片移动到目标牌组。
-pub fn move_card(
-    conn: &Connection,
-    card_id: i64,
-    target_deck_id: i64,
-) -> Result<(), AnkiError> {
+pub fn move_card(conn: &Connection, card_id: i64, target_deck_id: i64) -> Result<(), AnkiError> {
     let updated_at = Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE card SET deck_id = ?1, updated_at = ?2 WHERE id = ?3",
@@ -310,9 +309,12 @@ pub fn update_card_content(
     let sql = format!("UPDATE card SET {} WHERE id = ?", sets.join(", "));
     params.push(Box::new(card_id));
 
-    let param_refs: Vec<&dyn rusqlite::ToSql> =
-        params.iter().map(|b| &**b as &dyn rusqlite::ToSql).collect();
-    conn.execute(&sql, param_refs.as_slice()).map_err(map_rusqlite)?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params
+        .iter()
+        .map(|b| &**b as &dyn rusqlite::ToSql)
+        .collect();
+    conn.execute(&sql, param_refs.as_slice())
+        .map_err(map_rusqlite)?;
     if conn.changes() == 0 {
         return Err(AnkiError {
             code: "not_found".into(),
@@ -386,13 +388,24 @@ pub fn search_cards(
     }
 
     let rows = read_card_rows(conn, &sql, params)?;
-    rows.into_iter().map(|row| card_from_row(conn, row)).collect()
+    rows.into_iter()
+        .map(|row| card_from_row(conn, row))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::repository::{db, deck};
+
+    fn create_card(
+        conn: &Connection,
+        deck_id: i64,
+        front: &str,
+        back: &str,
+    ) -> Result<i64, AnkiError> {
+        create_card_with_algorithm(conn, deck_id, front, back, "sm2")
+    }
 
     fn setup_card() -> (Connection, i64) {
         let conn = db::open_in_memory().unwrap();
@@ -443,12 +456,21 @@ mod tests {
     fn missing_card_and_state_round_trip_are_reported() {
         let (conn, card_id) = setup_card();
         assert!(find_schedule(&conn, 999999).unwrap().is_none());
-        assert_eq!(save_schedule(&conn, 999999, &ScheduleRecord {
-            state: CardState::New,
-            algorithm: "sm2".into(),
-            scheduler_state: None,
-            due_at: None,
-        }).unwrap_err().code, "not_found");
+        assert_eq!(
+            save_schedule(
+                &conn,
+                999999,
+                &ScheduleRecord {
+                    state: CardState::New,
+                    algorithm: "sm2".into(),
+                    scheduler_state: None,
+                    due_at: None,
+                }
+            )
+            .unwrap_err()
+            .code,
+            "not_found"
+        );
 
         let record = ScheduleRecord {
             state: CardState::Learning,
