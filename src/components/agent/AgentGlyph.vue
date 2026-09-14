@@ -1,12 +1,12 @@
 <template>
-  <span v-if="svg" class="agent-glyph" :style="glyphStyle" v-html="svg" />
-  <span v-else class="agent-glyph agent-glyph--text" :style="glyphStyle">{{ icon }}</span>
+  <span v-if="url" class="agent-glyph agent-glyph--mask" :style="glyphStyle" />
+  <span v-else class="agent-glyph agent-glyph--text" :style="textStyle">{{ icon }}</span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { agentIconSvg } from './agentIcons'
+import { agentIconUrl } from './agentIcons'
 
 const props = withDefaults(defineProps<{
   icon: string
@@ -15,9 +15,16 @@ const props = withDefaults(defineProps<{
   size: 20,
 })
 
-const svg = computed(() => agentIconSvg(props.icon))
+const url = computed(() => agentIconUrl(props.icon))
 
 const glyphStyle = computed(() => ({
+  width: `${props.size}px`,
+  height: `${props.size}px`,
+  maskImage: `url(${url.value})`,
+  WebkitMaskImage: `url(${url.value})`,
+}))
+
+const textStyle = computed(() => ({
   width: `${props.size}px`,
   height: `${props.size}px`,
   fontSize: `${Math.round(props.size * 0.72)}px`,
@@ -32,10 +39,15 @@ const glyphStyle = computed(() => ({
   line-height: 1;
 }
 
-.agent-glyph :deep(svg) {
-  display: block;
-  width: 100%;
-  height: 100%;
+/* 用图标自身的透明通道做遮罩，颜色跟随 currentColor，深浅主题都能自适应 */
+.agent-glyph--mask {
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
 }
 
 .agent-glyph--text {

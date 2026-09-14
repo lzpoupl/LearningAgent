@@ -1,17 +1,10 @@
-const sources = import.meta.glob('../../assets/agent-icons/*.svg', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>
-
 export interface AgentIconOption {
   key: string
   label: string
-  svg: string
 }
 
 /** 图标库：key 会存进 Agent 配置的 icon 字段，label 用于选择器上的说明。 */
-const catalog: Array<{ key: string; label: string }> = [
+export const agentIconOptions: AgentIconOption[] = [
   { key: 'integral', label: '积分' },
   { key: 'sum', label: '求和' },
   { key: 'function', label: '函数' },
@@ -32,17 +25,13 @@ const catalog: Array<{ key: string; label: string }> = [
   { key: 'sparkle', label: '通用' },
 ]
 
-export const agentIconOptions: AgentIconOption[] = catalog
-  .map(item => ({ ...item, svg: sources[`../../assets/agent-icons/${item.key}.svg`] ?? '' }))
-  .filter(item => item.svg)
-
 export const defaultAgentIcon = 'sparkle'
 
-const iconSvgMap = new Map(agentIconOptions.map(item => [item.key, item.svg]))
+const iconKeys = new Set(agentIconOptions.map(item => item.key))
 
-/** 取图标源码；老的文字图标（如 ∑、En）会返回空串，由调用方回退成文字。 */
-export function agentIconSvg(icon: string): string {
-  return iconSvgMap.get(icon) ?? ''
+/** 取图标地址；老的文字图标（如 ∑、En）会返回空串，由调用方回退成文字。 */
+export function agentIconUrl(icon: string): string {
+  return iconKeys.has(icon) ? `/agent-icons/${icon}.svg` : ''
 }
 
 export function agentIconLabel(icon: string): string {

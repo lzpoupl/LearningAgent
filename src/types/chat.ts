@@ -5,7 +5,7 @@ export interface AgentConfigInput {
   subject: string
   description: string
   capabilities: string[]
-  /** 图标 key，对应 src/assets/agent-icons 下的图标；留空时沿用原图标。 */
+  /** 图标 key，对应 public/agent-icons 下的图标；留空时沿用原图标。 */
   icon?: string
   /** 图标底色（CSS 渐变），取自 AgentColors 预设；留空时沿用原配色。 */
   color?: string
