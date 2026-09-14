@@ -7,7 +7,9 @@ Anki 模块既有的分层与命名习惯，保证两模块风格一致。
 
 ### 1.1 模块职责
 
-- Agent 的配置管理：名称、学科、描述、展示信息、能力标签、使能状态、内置标记。
+- Agent 的配置管理：名称、描述、展示信息、能力标签、使能状态、内置标记。一个 Agent
+  默认对应一个学科或课程（数学 Agent、英语 Agent、操作系统 Agent），因此不设独立的
+  学科字段。
 - Agent 的工具授权：一个 Agent 可调用哪些工具。
 - Agent 的资产访问控制（ACL）：对结构化资源定位符的读/写权限。
 - 工具抽象与注册表：以结构化 id 描述工具，参数与返回值使用 JSON Schema。
@@ -29,13 +31,12 @@ src-tauri/src/
 │   └── asset.rs          # 资产、bucket 相关 DTO
 ├── repository/
 │   ├── agent.rs          # agent / agent_tool / agent_asset_permission 数据访问
-│   ├── permission.rs     # 全局权限开关数据访问
 │   ├── bucket.rs         # bucket 数据访问
 │   └── asset.rs          # asset 元数据数据访问
 ├── service/
 │   ├── agent.rs          # Agent 业务服务
 │   ├── asset.rs          # 资产业务服务（文件读写 + 元数据）
-│   ├── permission.rs     # 权限模块（定位符解析、ACL 匹配、三层校验）
+│   ├── permission.rs     # 权限模块（定位符解析、ACL 匹配）
 │   └── tool/
 │       ├── mod.rs        # Tool trait、ToolRegistry、ToolContext、调用结果
 │       ├── anki.rs       # Anki 工具
@@ -54,15 +55,18 @@ src-tauri/src/
 
 ### 2.1 迁移策略
 
-现有 `repository::db::migrate` 每次启动都会重放全部迁移（`db.rs:29`）。`000002.sql`
-使用裸 `ALTER TABLE`，在持久化数据库上第二次启动会因列已存在而失败。设计上做两点
-收敛：
+`repository::db::migrate` 每次启动都会重放全部迁移（`db.rs:29`），因此每个迁移文件都
+必须可重复执行。SQLite 不支持 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`，在不引入
+迁移记录表的前提下，函数式幂等只有一种表达方式：把新增列直接写进基础 `CREATE TABLE`
+定义。据此约定：
 
-1. 新增 `schema_migrations` 记录表，`migrate` 只执行未记录的文件，并把执行过的文件名
-   写入表中。对已发布的旧库，当 `schema_migrations` 为空而业务表已存在时，把
-   `000001`、`000002` 作为基线直接登记，再继续执行后续迁移。
-2. 本次新增的 `000003.sql` 全部使用 `CREATE TABLE IF NOT EXISTS` 与 `INSERT OR IGNORE`，
-   自身重放安全，便于在引入记录表之前平滑过渡。
+1. 卡片调度列 `algorithm`、`scheduler_state` 已并入 `000001.sql` 的 `CREATE TABLE
+   card`，原先用裸 `ALTER TABLE` 的迁移文件已删除。当前尚无持久化数据库，直接收敛
+   基础定义为完整结构最简洁，变更过程由 git 历史保留。
+2. 本次新增的 `000002.sql` 全部使用 `CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT
+   EXISTS` 与 `INSERT OR IGNORE`，重放安全。
+3. 后续迁移只使用幂等语句；新增列一律合并进对应表的 `CREATE TABLE IF NOT EXISTS`
+   定义，不再使用裸 `ALTER TABLE`。
 
 ### 2.2 ER 概览
 
@@ -76,7 +80,6 @@ erDiagram
     agent {
         TEXT id PK
         TEXT name
-        TEXT subject
         TEXT description
         TEXT icon
         TEXT color
@@ -108,13 +111,6 @@ erDiagram
         TEXT access
         TEXT created_at
     }
-    permission {
-        TEXT key PK
-        TEXT label
-        TEXT description
-        INTEGER enabled
-        INTEGER sort_order
-    }
     bucket {
         INTEGER id PK
         TEXT name
@@ -128,7 +124,6 @@ erDiagram
         TEXT name
         TEXT extension
         TEXT kind
-        TEXT subject
         INTEGER size
         TEXT mime_type
         TEXT storage_path
@@ -137,22 +132,15 @@ erDiagram
     }
 ```
 
-### 2.3 迁移 000003.sql
+### 2.3 迁移 000002.sql
 
 ```sql
--- Agent 模块基础表结构：Agent、工具、授权、ACL、全局权限、bucket 与资产。
-
--- 迁移记录表：只执行未登记的文件。
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    name       TEXT PRIMARY KEY,
-    applied_at TEXT NOT NULL
-);
+-- Agent 模块基础表结构：Agent、工具、授权、ACL、bucket 与资产。
 
 -- Agent 定义。
 CREATE TABLE IF NOT EXISTS agent (
     id            TEXT PRIMARY KEY,
     name          TEXT    NOT NULL,
-    subject       TEXT    NOT NULL DEFAULT '',
     description   TEXT    NOT NULL DEFAULT '',
     icon          TEXT    NOT NULL DEFAULT 'AI',
     color         TEXT    NOT NULL DEFAULT '',
@@ -201,15 +189,6 @@ CREATE TABLE IF NOT EXISTS agent_asset_permission (
 
 CREATE INDEX IF NOT EXISTS idx_agent_acl_agent ON agent_asset_permission (agent_id);
 
--- 全局权限开关（对应前端 AgentPermission 列表）。
-CREATE TABLE IF NOT EXISTS permission (
-    key         TEXT PRIMARY KEY,
-    label       TEXT    NOT NULL,
-    description TEXT    NOT NULL DEFAULT '',
-    enabled     INTEGER NOT NULL DEFAULT 1,
-    sort_order  INTEGER NOT NULL DEFAULT 0
-);
-
 -- 非结构化资产 bucket：名称 -> 文件系统目录。
 CREATE TABLE IF NOT EXISTS bucket (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,7 +206,6 @@ CREATE TABLE IF NOT EXISTS asset (
     extension    TEXT    NOT NULL DEFAULT '',
     kind         TEXT    NOT NULL DEFAULT 'document'
                  CHECK (kind IN ('pdf', 'slides', 'note', 'image', 'document')),
-    subject      TEXT    NOT NULL DEFAULT '',
     size         INTEGER NOT NULL DEFAULT 0,
     mime_type    TEXT    NOT NULL DEFAULT 'application/octet-stream',
     storage_path TEXT    NOT NULL DEFAULT '',        -- 相对 bucket.root_path
@@ -237,7 +215,6 @@ CREATE TABLE IF NOT EXISTS asset (
 );
 
 CREATE INDEX IF NOT EXISTS idx_asset_bucket  ON asset (bucket_id);
-CREATE INDEX IF NOT EXISTS idx_asset_subject ON asset (subject);
 
 -- 内置工具播种（启动时由注册表再同步一次，保持描述最新）。
 INSERT OR IGNORE INTO tool (id, name, description, parameters, returns, builtin, created_at) VALUES
@@ -258,13 +235,13 @@ INSERT OR IGNORE INTO tool (id, name, description, parameters, returns, builtin,
 
 -- 内置 Agent 播种。
 INSERT OR IGNORE INTO agent
-  (id, name, subject, description, icon, color, system_prompt, capabilities, enabled, builtin, created_at, updated_at)
+  (id, name, description, icon, color, system_prompt, capabilities, enabled, builtin, created_at, updated_at)
 VALUES
-  ('math', '数学 Agent', '数学', '数学问题、公式推导与解题思路',
+  ('math', '数学 Agent', '数学问题、公式推导与解题思路',
    '∑', 'linear-gradient(135deg, #438fff, #5c6df5)',
    '你是数学学习助手，负责题目解析、知识点拆解与错题复盘。',
    '["题目解析","知识点拆解","错题复盘"]', 1, 1, datetime('now'), datetime('now')),
-  ('english', '英语 Agent', '英语', '英语词汇、语法、翻译与口语练习',
+  ('english', '英语 Agent', '英语词汇、语法、翻译与口语练习',
    'En', 'linear-gradient(135deg, #26b7bf, #16a5a8)',
    '你是英语学习助手，负责词汇讲解、句子分析与翻译训练。',
    '["词汇讲解","句子分析","口语练习"]', 1, 1, datetime('now'), datetime('now'));
@@ -280,12 +257,6 @@ INSERT OR IGNORE INTO agent_asset_permission (agent_id, locator, access, created
 SELECT id, 'anki://', 'read_write', datetime('now') FROM agent WHERE builtin = 1;
 INSERT OR IGNORE INTO agent_asset_permission (agent_id, locator, access, created_at)
 SELECT id, 'file://notes/', 'read', datetime('now') FROM agent WHERE builtin = 1;
-
--- 全局权限开关播种。
-INSERT OR IGNORE INTO permission (key, label, description, enabled, sort_order) VALUES
-  ('read-assets', '读取学习资料', '允许 Agent 检索 PDF、笔记和课件。',       1, 1),
-  ('read-notes',  '读取错题与笔记', '允许 Agent 参考你的结构化学习记录。',   1, 2),
-  ('write-anki',  '创建 Anki 卡片', '允许 Agent 将结论整理为待复习卡片。',   1, 3);
 ```
 
 ### 2.4 运行时初始化
@@ -295,6 +266,8 @@ DO UPDATE` 写入 `tool` 表，保证描述与 Schema 始终与代码一致。
 - 启动时确保存在默认 bucket：`notes` 指向应用数据目录下的 `assets/notes`，已存在则跳过。
 - 自定义 Agent 的 id 由服务端生成，采用 `agent-<unix_millis>-<rand>` 形式，无需新增依赖；
   后续如需更强唯一性可引入 `uuid`。
+- 不设学科字段：Agent 本身即学科/课程的载体，资产所属的学科由所属 bucket 与 Agent 的
+  ACL 表达。
 
 ## 3. 后端接口设计
 
@@ -325,7 +298,6 @@ pub enum AccessMode { Read, Write, ReadWrite }
 pub struct AgentInfo {
     pub id: String,
     pub name: String,
-    pub subject: String,
     pub description: String,
     pub icon: String,
     pub color: String,
@@ -334,11 +306,10 @@ pub struct AgentInfo {
     pub builtin: bool,
 }
 
-/// 创建/更新输入。前端当前只发送前 4 个字段，其余为可选扩展字段。
+/// 创建/更新输入。前端当前只发送前 3 个字段，其余为可选扩展字段。
 #[serde(rename_all = "camelCase")]
 pub struct AgentConfigInput {
     pub name: String,
-    pub subject: String,
     pub description: String,
     pub capabilities: Vec<String>,
     #[serde(default)] pub icon: Option<String>,
@@ -371,15 +342,6 @@ pub struct ToolInfo {
     pub returns: serde_json::Value,     // JSON Schema
 }
 
-/// 全局权限开关，与前端 AgentPermission 一一对应。
-#[serde(rename_all = "camelCase")]
-pub struct AgentPermission {
-    pub key: String,
-    pub label: String,
-    pub description: String,
-    pub enabled: bool,
-}
-
 /// 会话上下文面板中的资产条目。
 #[serde(rename_all = "snake_case")]
 pub enum AgentContextAssetType { Document, Collection, Deck }
@@ -396,7 +358,6 @@ pub struct AgentContextAsset {
 #[serde(rename_all = "camelCase")]
 pub struct AgentContext {
     pub assets: Vec<AgentContextAsset>,
-    pub permissions: Vec<AgentPermission>,
 }
 
 /// 工具调用请求与结果。
@@ -431,7 +392,6 @@ pub struct LearningAsset {
     pub extension: String,
     pub type_label: String,
     pub kind: AssetKind,
-    pub subject: String,
     pub size: i64,
     pub mime_type: String,
     pub added_at: String,
@@ -440,14 +400,12 @@ pub struct LearningAsset {
 
 #[serde(rename_all = "camelCase")]
 pub struct AssetQuery {
-    pub subject: Option<String>,
     pub sort_by: Option<AssetSort>,
 }
 
 #[serde(rename_all = "camelCase")]
 pub struct UploadAssetRequest {
     pub name: String,
-    pub subject: String,
     pub size: i64,
     pub mime_type: String,
     pub content_base64: String,
@@ -484,8 +442,6 @@ Agent（controller/agent.rs）：
 | `agent_delete`                | `agentId`                 | `()`                | 删除；内置 Agent 拒绝         |
 | `agent_set_enabled`           | `agentId, enabled`        | `AgentInfo`         | 启用/停用                     |
 | `agent_get_context`           | `agentId`                 | `AgentContext`      | 会话上下文面板数据            |
-| `agent_get_permissions`       | —                         | `AgentPermission[]` | 全局权限开关                  |
-| `agent_update_permissions`    | `permissions`             | `AgentPermission[]` | 更新全局开关                  |
 | `agent_list_tools`            | `agentId?`                | `ToolInfo[]`        | 工具目录，可按 Agent 授权过滤 |
 | `agent_set_tools`             | `agentId, toolIds`        | `ToolInfo[]`        | 设置 Agent 工具授权           |
 | `agent_get_asset_permissions` | `agentId`                 | `AssetPermission[]` | 读取 ACL                      |
@@ -496,7 +452,6 @@ Agent（controller/agent.rs）：
 | 命令                  | 参数                        | 返回              |
 | --------------------- | --------------------------- | ----------------- |
 | `asset_list`          | `query: AssetQuery`         | `LearningAsset[]` |
-| `asset_list_subjects` | —                           | `string[]`        |
 | `asset_upload`        | `input: UploadAssetRequest` | `LearningAsset`   |
 | `asset_get_url`       | `assetId`                   | `string`          |
 | `asset_delete`        | `assetId`                   | `()`              |
@@ -512,8 +467,8 @@ Agent（controller/agent.rs）：
 | ------------------- | ---------------- | ------------ |
 | `agent_invoke_tool` | `call: ToolCall` | `ToolResult` |
 
-`agent_invoke_tool` 依次完成：Agent 使能校验、工具授权校验、全局权限开关校验、资产 ACL
-校验，全部通过后交给工具执行。任一步失败返回 `permission_denied`，不产生副作用。
+`agent_invoke_tool` 依次完成：Agent 使能校验、工具授权校验、资产 ACL 校验，全部通过后
+交给工具执行。任一步失败返回 `permission_denied`，不产生副作用。
 
 ### 3.5 错误码
 
@@ -525,7 +480,6 @@ Agent（controller/agent.rs）：
 | `conflict`            | 名称重复（bucket、Agent）           |
 | `builtin_protected`   | 尝试删除内置 Agent                  |
 | `tool_not_granted`    | 工具未授权给该 Agent                |
-| `permission_disabled` | 全局权限开关关闭                    |
 | `permission_denied`   | 资产 ACL 不允许该操作               |
 | `agent_disabled`      | Agent 已停用                        |
 | `internal` / `db`     | 内部与数据库错误                    |
@@ -554,8 +508,6 @@ pub trait Tool: Send + Sync {
     fn description(&self) -> &'static str;
     fn parameters(&self) -> serde_json::Value;   // JSON Schema
     fn returns(&self) -> serde_json::Value;      // JSON Schema
-    /// 该工具需要的全局权限开关。
-    fn required_permissions(&self) -> &'static [&'static str] { &[] }
     /// 根据实参推导需要的资产访问权限。
     fn access_requests(&self, args: &serde_json::Value) -> Result<Vec<AccessRequest>, ApiError>;
     fn invoke(&self, ctx: &ToolContext, args: serde_json::Value)
@@ -611,40 +563,44 @@ file://<bucket>/<path>       bucket 内的文件或目录，路径以 / 结尾�
 
 ```
 agent_invoke_tool(agentId, toolId, args)
-  1. Agent 存在且 enabled            -> 否则 agent_disabled / not_found
-  2. agent_tool 中存在 (agentId,toolId) -> 否则 tool_not_granted
-  3. Tool.required_permissions() 全部 enabled -> 否则 permission_disabled
-  4. Tool.access_requests(args) 逐条经 ACL 判定 -> 否则 permission_denied
-  5. Tool.invoke(ctx, args)
+  1. Agent 存在且 enabled                -> 否则 agent_disabled / not_found
+  2. agent_tool 中存在 (agentId,toolId)   -> 否则 tool_not_granted
+  3. Tool.access_requests(args) 逐条经 ACL 判定 -> 否则 permission_denied
+  4. Tool.invoke(ctx, args)
 ```
 
-全局权限开关与工具族的映射：`anki.*` 的写操作对应 `write-anki`，`asset.*` 读操作对应
-`read-assets`，未来的结构化笔记工具对应 `read-notes`，`ask_question` 不映射。
+工具授权与资产 ACL 都由前端按 Agent 具体配置：工具授权决定「能调用哪些工具」，资产 ACL
+决定「能读写哪些资源」，两者共同构成完整的权限判定，`ask_question` 不需要资产权限。
 
 ### 5.4 会话上下文
 
 `agent_get_context` 由 ACL 反推展示条目：`anki://<path>` 解析为 deck 条目（`anki://` 根
 展开为「全部牌组」），`file://<bucket>/<path>` 解析为 document 条目，笔记集合映射为
-collection 条目；同时返回全局权限开关，供 `ChatContextPanel` 展示。
+collection 条目，供 `ChatContextPanel` 展示。
 
 ## 6. 与前端契约的差异
 
 前端已有 `services/agent.ts`、`services/assets.ts`，其中大部分命令与本文设计一致，存在
 以下缺口，建议补充：
 
-1. `AgentConfigInput` 未携带 `toolIds`、`permissions`、`systemPrompt`。建议扩展为可选
-   字段，`AgentManager` 的权限弹窗可据此编辑工具授权与资产 ACL。
+1. `AgentInfo` 与 `AgentConfigInput` 需移除 `subject`；`AgentConfigInput` 还要新增可选的
+   `toolIds`、`permissions`、`systemPrompt`，`AgentManager` 的权限弹窗可据此编辑工具
+   授权与资产 ACL。
 2. `services/agent.ts` 缺少 `agent_list_tools`、`agent_set_tools`、
    `agent_get_asset_permissions`、`agent_set_asset_permissions`。
-3. `services/assets.ts` 缺少 bucket 管理与 `asset_upload_image`；`AnkiCreator` 的图片插入
-   需要 `asset_upload_image`。
-4. `AgentInfo.capabilities` 与 `AgentPermission` 已能直接映射，无需改动。
+3. `services/assets.ts`：`LearningAsset`、`AssetQuery`、`UploadAssetRequest` 需移除
+   `subject`，删除 `listAssetSubjects`；`AssetManager` 的学科筛选与上传表单相应调整。
+   同时补充 bucket 管理与 `asset_upload_image`，`AnkiCreator` 的图片插入依赖后者。
+4. `services/agent.ts` 的 `getAgentPermissions`、`updateAgentPermissions`，以及
+   `AgentPermission`、`AgentContext.permissions` 需删除；权限改为按 Agent 直接配置工具
+   授权（`agent_list_tools` / `agent_set_tools`）与资产 ACL（`agent_get_asset_permissions`
+   / `agent_set_asset_permissions`）。`AgentInfo.capabilities` 可直接映射。
 
 在上述命令补齐前，前端可继续使用 `mocks/agents.ts`、`mocks/assets.ts` 的假数据。
 
 ## 7. 实施顺序
 
-1. `000003.sql` 迁移与 `schema_migrations` 记录机制。
+1. `000002.sql` 迁移（全部使用幂等语句）与 `000001.sql` 调度列的收敛。
 2. `interface/agent.rs`、`interface/asset.rs`、`interface/error.rs`。
 3. `repository/` 各数据访问模块与单元测试。
 4. `service/agent.rs`、`service/asset.rs` 与用例测试。

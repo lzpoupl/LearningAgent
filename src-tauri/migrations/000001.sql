@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS card (
     state       TEXT    NOT NULL DEFAULT 'new'
                 CHECK (state IN ('new', 'learning', 'review', 'relearning')),
     due_at      TEXT,
+    algorithm        TEXT NOT NULL DEFAULT 'sm2',
+    scheduler_state  TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL,
     FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE CASCADE
