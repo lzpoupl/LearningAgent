@@ -77,7 +77,9 @@
       </el-card>
 
       <ChatContextPanel :agents="agents" :current-session-id="currentSessionId" :default-agent-id="conversationAgent"
-        :sessions="sessions" @select-session="emit('select-session', $event)" />
+        :sessions="sessions" @delete-session="emit('delete-session', $event)"
+        @rename-session="(sessionId, title) => emit('rename-session', sessionId, title)"
+        @select-session="emit('select-session', $event)" />
     </section>
   </main>
 </template>
@@ -106,6 +108,8 @@ const emit = defineEmits<{
   send: [content: string]
   start: [agent: AgentType, content: string]
   'select-session': [sessionId: string]
+  'rename-session': [sessionId: string, title: string]
+  'delete-session': [sessionId: string]
 }>()
 
 const agents = ref<AgentInfo[]>([])

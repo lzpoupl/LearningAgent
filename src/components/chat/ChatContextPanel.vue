@@ -19,18 +19,47 @@
 
     <div v-if="!historySessions.length" class="panel-state">该学习助手还没有历史会话</div>
     <div v-else class="session-list">
-      <button v-for="session in historySessions" :key="session.id" class="session-item"
-        :class="{ active: session.id === currentSessionId }" type="button"
-        @click="emit('select-session', session.id)">
-        <strong>{{ session.title }}</strong>
-        <span>{{ sessionTime(session.createdAt) }} · {{ session.messages.length }} 条消息</span>
-      </button>
+      <div v-for="session in historySessions" :key="session.id" class="session-item"
+        :class="{ active: session.id === currentSessionId }" role="button" tabindex="0"
+        @click="emit('select-session', session.id)" @keydown.enter.prevent="emit('select-session', session.id)">
+        <div class="session-main">
+          <strong>{{ session.title }}</strong>
+          <span>{{ sessionTime(session.createdAt) }} · {{ session.messages.length }} 条消息</span>
+        </div>
+
+        <el-dropdown class="session-actions" trigger="click" @command="command => handleCommand(command, session)"
+          @click.stop>
+          <button class="session-more" type="button" :title="`${session.title} 的更多操作`">
+            <el-icon>
+              <MoreFilled />
+            </el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="rename">
+                <el-icon>
+                  <EditPen />
+                </el-icon>
+                重命名
+              </el-dropdown-item>
+              <el-dropdown-item command="delete" divided>
+                <el-icon>
+                  <Delete />
+                </el-icon>
+                删除
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessageBox } from 'element-plus'
+import { Delete, EditPen, MoreFilled } from '@element-plus/icons-vue'
 
 import AgentIcon from '../agent/AgentIcon.vue'
 import type { AgentInfo, ChatSession } from '../../types/chat'
@@ -44,6 +73,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-session': [sessionId: string]
+  'rename-session': [sessionId: string, title: string]
+  'delete-session': [sessionId: string]
 }>()
 
 const scopeAgent = ref(props.defaultAgentId || props.agents[0]?.id || '')
@@ -82,6 +113,51 @@ function sessionTime(value: string): string {
   const isToday = date.toDateString() === new Date().toDateString()
 
   return isToday ? `今天 ${time}` : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+}
+
+function handleCommand(command: string, session: ChatSession) {
+  if (command === 'rename') {
+    void renameSession(session)
+    return
+  }
+
+  if (command === 'delete') {
+    void removeSession(session)
+  }
+}
+
+async function renameSession(session: ChatSession) {
+  try {
+    const result = await ElMessageBox.prompt('输入新的会话名称', '重命名会话', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValue: session.title,
+      inputPlaceholder: '会话名称',
+      inputValidator: value => (value && value.trim() ? true : '会话名称不能为空'),
+    })
+
+    const title = String(result.value ?? '').trim()
+
+    if (title && title !== session.title) {
+      emit('rename-session', session.id, title)
+    }
+  } catch {
+    // 取消重命名时保持原样
+  }
+}
+
+async function removeSession(session: ChatSession) {
+  try {
+    await ElMessageBox.confirm(`删除后“${session.title}”的对话记录将不再显示。`, '删除会话', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    emit('delete-session', session.id)
+  } catch {
+    // 取消删除时保持原样
+  }
 }
 </script>
 
@@ -147,8 +223,8 @@ function sessionTime(value: string): string {
 .session-item {
   display: flex;
   width: 100%;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 8px;
   padding: 9px 10px;
   border: 1px solid var(--learning-border);
   border-radius: 8px;
@@ -158,9 +234,47 @@ function sessionTime(value: string): string {
   transition: border-color 140ms ease, background 140ms ease;
 }
 
+.session-item:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 1px;
+}
+
 .session-item:hover {
   border-color: #b7d0f8;
   background: #eef5ff;
+}
+
+.session-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.session-more {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--learning-text-muted);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.session-item:hover .session-more {
+  opacity: 1;
+}
+
+.session-more:hover {
+  background: rgba(40, 125, 245, 0.12);
+  color: var(--el-color-primary);
 }
 
 .session-item.active {

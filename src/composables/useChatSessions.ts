@@ -137,6 +137,7 @@ export function useChatSessions() {
       }
     } catch (error) {
       console.error(error)
+      throw error
     }
   }
 
@@ -160,6 +161,7 @@ export function useChatSessions() {
       currentAgent.value = nextSession?.agent ?? ''
     } catch (error) {
       console.error(error)
+      throw error
     }
   }
 

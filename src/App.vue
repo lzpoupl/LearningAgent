@@ -9,6 +9,8 @@
         @start-chat="openChatWith"
         @new-session="resetChatSession"
         @select-session="openSession"
+        @rename-session="renameChatSession"
+        @delete-session="deleteChatSession"
         @send="sendMessage"
         @open-agents="navigate('agents')"
         @open-assets="navigate('assets')"
@@ -24,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed, ref, type Component } from 'vue'
+import { ElMessage } from 'element-plus'
 
 import AppLayout from './components/layout/AppLayout.vue'
 import AgentSession from './pages/AgentSession.vue'
@@ -67,6 +70,8 @@ const {
   startSession,
   sendMessage,
   selectSession,
+  renameSession,
+  deleteSession,
 } = useChatSessions()
 
 const currentComponent = computed(() => {
@@ -147,6 +152,26 @@ async function openSession(sessionId: string) {
   pendingAgent.value = undefined
   activeView.value = 'chat'
   await selectSession(sessionId)
+}
+
+async function renameChatSession(sessionId: string, title: string) {
+  try {
+    await renameSession(sessionId, title)
+    ElMessage.success('会话已重命名')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('会话重命名失败，请重试。')
+  }
+}
+
+async function deleteChatSession(sessionId: string) {
+  try {
+    await deleteSession(sessionId)
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('会话删除失败，请重试。')
+  }
 }
 
 function openCardCreator(card?: Card, deckPath?: string) {
