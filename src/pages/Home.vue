@@ -20,7 +20,8 @@
             @click="openQuickAction(action)"
           >
             <div class="quick-icon" :class="action.theme">
-              {{ action.icon }}
+              <AgentGlyph v-if="action.agentIcon" :icon="action.agentIcon" :size="22" />
+              <template v-else>{{ action.icon }}</template>
             </div>
 
             <strong>{{ action.title }}</strong>
@@ -109,6 +110,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import AgentGlyph from '../components/agent/AgentGlyph.vue'
 import { listAgents } from '../services/agent'
 import { getTodayOverview, updateStudyTask } from '../services/study'
 import type { AgentInfo, AgentType } from '../types/chat'
@@ -122,7 +124,8 @@ const emit = defineEmits<{
 }>()
 
 interface QuickAction {
-  icon: string
+  icon?: string
+  agentIcon?: string
   title: string
   description: string
   theme: 'blue' | 'green' | 'purple' | 'orange'
@@ -142,7 +145,7 @@ const quickActions = computed<QuickAction[]>(() => {
     .filter(agent => agent.enabled)
     .slice(0, 2)
     .map((agent, index) => ({
-      icon: agent.icon,
+      agentIcon: agent.icon,
       title: agent.name,
       description: agent.capabilities.slice(0, 2).join(' · ') || agent.description,
       theme: index === 0 ? ('blue' as const) : ('green' as const),

@@ -10,7 +10,7 @@
         :disabled="!agents.length">
         <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
           <span class="agent-option">
-            <el-avatar :size="18" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
+            <AgentIcon :color="agent.color" :icon="agent.icon" :size="18" />
             {{ agent.name }}
           </span>
         </el-option>
@@ -31,6 +31,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+
+import AgentIcon from '../agent/AgentIcon.vue'
 import type { AgentInfo, ChatSession } from '../../types/chat'
 
 const props = defineProps<{

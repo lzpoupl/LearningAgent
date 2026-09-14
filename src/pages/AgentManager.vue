@@ -16,7 +16,7 @@
       <el-col v-for="agent in agents" :key="agent.id" :lg="12" :md="12" :sm="24" :xl="12" :xs="24">
         <el-card class="agent-card" shadow="hover">
           <div class="agent-card-heading">
-            <el-avatar :size="46" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
+            <AgentIcon :color="agent.color" :icon="agent.icon" :size="46" />
             <div class="agent-card-title">
               <strong>{{ agent.name }}</strong>
               <span>{{ agent.builtin ? '系统 Agent' : '自定义 Agent' }}</span>
@@ -59,6 +59,22 @@
         <el-form-item label="Agent 名称" prop="name">
           <el-input v-model="form.name" placeholder="例如：操作系统 Agent" />
         </el-form-item>
+        <el-form-item label="Agent 图标">
+          <div class="icon-picker">
+            <button v-for="option in agentIconOptions" :key="option.key" class="icon-choice"
+              :class="{ active: form.icon === option.key }" :title="option.label" type="button"
+              @click="form.icon = option.key">
+              <AgentIcon :color="form.color" :icon="option.key" :size="38" />
+            </button>
+          </div>
+        </el-form-item>
+        <el-form-item label="Agent 配色">
+          <div class="color-picker">
+            <button v-for="preset in agentColorPresets" :key="preset.key" class="color-choice"
+              :class="{ active: form.color === preset.color }" :style="{ background: preset.color }"
+              :title="preset.label" type="button" @click="form.color = preset.color" />
+          </div>
+        </el-form-item>
         <el-form-item label="所属学科" prop="subject">
           <el-input v-model="form.subject" placeholder="例如：计算机" />
         </el-form-item>
@@ -98,6 +114,9 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
+import AgentIcon from '../components/agent/AgentIcon.vue'
+import { agentIconOptions, defaultAgentIcon } from '../components/agent/agentIcons'
+import { agentColorPresets, defaultAgentColor } from '../components/agent/agentColors'
 import PageHeader from '../components/common/PageHeader.vue'
 import {
   createAgent,
@@ -110,8 +129,10 @@ import {
 } from '../services/agent'
 import type { AgentConfigInput, AgentInfo, AgentPermission, AgentType } from '../types/chat'
 
-interface AgentForm extends Omit<AgentConfigInput, 'capabilities'> {
+interface AgentForm extends Omit<AgentConfigInput, 'capabilities' | 'icon' | 'color'> {
   capabilities: string
+  icon: string
+  color: string
 }
 
 const emit = defineEmits<{
@@ -134,6 +155,8 @@ const form = reactive<AgentForm>({
   subject: '',
   description: '',
   capabilities: '',
+  icon: defaultAgentIcon,
+  color: defaultAgentColor,
 })
 
 const rules: FormRules<AgentForm> = {
@@ -147,6 +170,8 @@ function resetForm() {
   form.subject = ''
   form.description = ''
   form.capabilities = ''
+  form.icon = defaultAgentIcon
+  form.color = defaultAgentColor
 }
 
 function openCreateDialog() {
@@ -161,6 +186,8 @@ function editAgent(agent: AgentInfo) {
   form.subject = agent.subject
   form.description = agent.description
   form.capabilities = agent.capabilities.join(', ')
+  form.icon = agent.icon || defaultAgentIcon
+  form.color = agent.color || defaultAgentColor
   dialogVisible.value = true
 }
 
@@ -188,6 +215,8 @@ async function saveAgent() {
         subject: form.subject.trim(),
         description: form.description.trim(),
         capabilities,
+        icon: form.icon,
+        color: form.color,
       })
       const index = agents.value.findIndex(item => item.id === editingAgentId.value)
       if (index !== -1) {
@@ -200,6 +229,8 @@ async function saveAgent() {
         subject: form.subject.trim(),
         description: form.description.trim(),
         capabilities,
+        icon: form.icon,
+        color: form.color,
       })
       agents.value.push(createdAgent)
       ElMessage.success('自定义 Agent 已创建')
@@ -322,6 +353,66 @@ onMounted(loadAgents)
 
 .agent-card-heading {
   gap: 12px;
+}
+
+.icon-picker {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.icon-choice {
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.icon-choice:hover {
+  border-color: #b7d0f8;
+}
+
+.icon-choice.active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px rgba(40, 125, 245, 0.16);
+}
+
+.color-picker {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.color-choice {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.color-choice:hover {
+  transform: scale(1.06);
+}
+
+.color-choice.active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px rgba(40, 125, 245, 0.16);
 }
 
 .agent-card-title {

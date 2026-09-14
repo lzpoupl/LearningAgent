@@ -5,9 +5,8 @@
         <template v-if="currentMessages.length" #header>
           <div class="conversation-header">
             <div class="agent-heading">
-              <el-avatar v-if="currentAgentInfo" :size="38" :style="{ background: currentAgentInfo.color }">
-                {{ currentAgentInfo.icon }}
-              </el-avatar>
+              <AgentIcon v-if="currentAgentInfo" :color="currentAgentInfo.color" :icon="currentAgentInfo.icon"
+                :size="38" />
               <el-avatar v-else class="empty-avatar" :size="38" />
               <div>
                 <strong>{{ currentAgentInfo?.name ?? currentAgent }}</strong>
@@ -34,13 +33,12 @@
             <el-select v-model="selectedAgent" class="agent-select" popper-class="agent-select-popper"
               placeholder="请选择学习助手" :disabled="!agents.length">
               <template #prefix>
-                <el-avatar v-if="selectedAgentInfo" :size="18" :style="{ background: selectedAgentInfo.color }">
-                  {{ selectedAgentInfo.icon }}
-                </el-avatar>
+                <AgentIcon v-if="selectedAgentInfo" :color="selectedAgentInfo.color" :icon="selectedAgentInfo.icon"
+                  :size="18" />
               </template>
               <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
                 <span class="agent-option-label">
-                  <el-avatar :size="20" :style="{ background: agent.color }">{{ agent.icon }}</el-avatar>
+                  <AgentIcon :color="agent.color" :icon="agent.icon" :size="20" />
                   {{ agent.name }}
                 </span>
                 <span class="agent-option-value">{{ agent.description }}</span>
@@ -88,6 +86,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Loading, Plus, Promotion } from '@element-plus/icons-vue'
 
+import AgentIcon from '../components/agent/AgentIcon.vue'
 import ChatContextPanel from '../components/chat/ChatContextPanel.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 import { getAgent, listAgents } from '../services/agent'
