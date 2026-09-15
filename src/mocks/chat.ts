@@ -38,7 +38,7 @@ function createAssistantMessage(agent: AgentType, question: string): ChatMessage
     content: [
       {
         type: 'text',
-        content: `${agent} Agent 已收到你的问题：${question}`,
+        content: `学习助手 ${agent} 已收到你的问题：${question}`,
       },
       {
         type: 'latex',
@@ -68,13 +68,13 @@ export class ChatMock {
         return cloneSession(this.requireSession(String(payload.sessionId ?? '')))
       case 'chat_create_session':
         return this.createSession(
-          String(payload.agent ?? ''),
+          Number(payload.agent ?? 0),
           String(payload.message ?? ''),
         )
       case 'chat_send_message':
         return this.sendMessage(
           String(payload.sessionId ?? ''),
-          String(payload.agent ?? ''),
+          Number(payload.agent ?? 0),
           String(payload.message ?? ''),
         )
       case 'chat_rename_session':

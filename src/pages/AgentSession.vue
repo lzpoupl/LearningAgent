@@ -123,7 +123,7 @@ const currentMessages = computed(() => props.currentSession?.messages ?? [])
 const activeAgent = computed(() => (props.currentSession ? props.currentAgent : selectedAgent.value))
 const selectedAgentInfo = computed(() => agents.value.find(agent => agent.id === selectedAgent.value) ?? null)
 // 右栏只跟随当前打开的会话，左上手选助手不会带动它
-const conversationAgent = computed(() => props.currentSession?.agent ?? '')
+const conversationAgent = computed(() => props.currentSession?.agent ?? 0)
 const agentError = ref('')
 
 let agentRequestId = 0
@@ -132,7 +132,7 @@ async function loadAgents() {
   agentsError.value = ''
 
   try {
-    agents.value = (await listAgents()).filter(agent => agent.enabled)
+    agents.value = await listAgents()
   } catch (error) {
     console.error(error)
     agentsError.value = '学习助手加载失败，请稍后重试。'
@@ -152,7 +152,7 @@ function adoptLastConversationAgent() {
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .find(session => agents.value.some(agent => agent.id === session.agent))
 
-  selectedAgent.value = latestSession?.agent ?? ''
+  selectedAgent.value = latestSession?.agent ?? 0
 }
 
 async function loadAgent(agentId: AgentType) {

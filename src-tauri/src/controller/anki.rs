@@ -134,27 +134,3 @@ pub fn anki_update_scheduler_config(
 ) -> Result<SchedulerConfig, AnkiError> {
     state.anki.update_scheduler_config(scheduler)
 }
-
-#[macro_export]
-macro_rules! anki_handlers {
-    () => {
-        tauri::generate_handler![
-            crate::controller::anki::anki_get_subdecks,
-            crate::controller::anki::anki_get_cards,
-            crate::controller::anki::anki_get_card,
-            crate::controller::anki::anki_search_cards,
-            crate::controller::anki::anki_create_deck,
-            crate::controller::anki::anki_create_card,
-            crate::controller::anki::anki_move_deck,
-            crate::controller::anki::anki_move_card,
-            crate::controller::anki::anki_grade_card,
-            crate::controller::anki::anki_get_review_options,
-            crate::controller::anki::anki_reset_card,
-            crate::controller::anki::anki_update_card_content,
-            crate::controller::anki::anki_delete_deck,
-            crate::controller::anki::anki_delete_card,
-            crate::controller::anki::anki_get_scheduler_config,
-            crate::controller::anki::anki_update_scheduler_config,
-        ]
-    };
-}

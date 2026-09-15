@@ -25,7 +25,9 @@ export function setupMocks(): void {
 
     if (cmd.startsWith('anki_')) return anki.handle(cmd, args)
     if (cmd.startsWith('agent_')) return agents.handle(cmd, args)
+    if (cmd === 'tool_list' || cmd === 'get_all_tool_groups') return agents.handle(cmd, args)
     if (cmd.startsWith('asset_')) return assets.handle(cmd, args)
+    if (cmd.startsWith('bucket_')) return assets.handle(cmd, args)
     if (cmd.startsWith('chat_')) return chat.handle(cmd, args)
     if (cmd.startsWith('settings_')) return settings.handle(cmd, args)
     if (cmd.startsWith('study_')) return study.handle(cmd, args)

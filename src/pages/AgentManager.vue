@@ -21,21 +21,9 @@
               <strong>{{ agent.name }}</strong>
               <span>{{ agent.builtin ? '系统 Agent' : '自定义 Agent' }}</span>
             </div>
-            <el-switch
-              :aria-label="`${agent.name}启用状态`"
-              :model-value="agent.enabled"
-              @change="toggleAgent(agent, $event)"
-            />
           </div>
 
           <p class="agent-description">{{ agent.description }}</p>
-
-          <div class="agent-tags">
-            <el-tag v-for="tag in agent.capabilities" :key="tag" effect="plain" size="small">
-              {{ tag }}
-            </el-tag>
-            <el-tag effect="plain" size="small" type="info">{{ agent.subject }}</el-tag>
-          </div>
 
           <div class="agent-card-footer">
             <el-button link type="primary" @click="startAgent(agent)">开始对话</el-button>
@@ -46,70 +34,73 @@
       </el-col>
     </el-row>
 
-    <el-card class="permission-card" shadow="never">
-      <div>
-        <strong>Agent 权限管理</strong>
-        <p>按学习资产配置读取、编辑和写入权限。</p>
-      </div>
-      <el-button plain :loading="permissionLoading" @click="openPermissionDialog">权限设置</el-button>
-    </el-card>
+    <el-dialog v-model="dialogVisible" :title="editingAgentId !== null ? '配置 Agent' : '创建 Agent'"
+      width="min(920px, 94vw)">
+      <div class="agent-config">
+        <el-form ref="formRef" class="agent-config-form" :model="form" :rules="rules" label-position="top">
+          <el-form-item label="Agent 名称" prop="name">
+            <el-input v-model="form.name" placeholder="例如：操作系统 Agent" />
+          </el-form-item>
+          <el-form-item label="Agent 图标">
+            <div class="icon-picker">
+              <button v-for="option in agentIconOptions" :key="option.key" class="icon-choice"
+                :class="{ active: form.icon === option.key }" :title="option.label" type="button"
+                @click="form.icon = option.key">
+                <AgentIcon :color="form.color" :icon="option.key" :size="38" />
+              </button>
+            </div>
+          </el-form-item>
+          <el-form-item label="Agent 配色">
+            <div class="color-picker">
+              <button v-for="preset in agentColorPresets" :key="preset.key" class="color-choice"
+                :class="{ active: form.color === preset.color }" :style="{ background: preset.color }"
+                :title="preset.label" type="button" @click="form.color = preset.color" />
+            </div>
+          </el-form-item>
+          <el-form-item label="职责描述" prop="description">
+            <el-input v-model="form.description" :rows="4" type="textarea" />
+          </el-form-item>
+        </el-form>
 
-    <el-dialog v-model="dialogVisible" :title="editingAgentId ? '配置 Agent' : '创建 Agent'" width="min(520px, 92vw)">
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="Agent 名称" prop="name">
-          <el-input v-model="form.name" placeholder="例如：操作系统 Agent" />
-        </el-form-item>
-        <el-form-item label="Agent 图标">
-          <div class="icon-picker">
-            <button v-for="option in agentIconOptions" :key="option.key" class="icon-choice"
-              :class="{ active: form.icon === option.key }" :title="option.label" type="button"
-              @click="form.icon = option.key">
-              <AgentIcon :color="form.color" :icon="option.key" :size="38" />
-            </button>
+        <section class="permission-section">
+          <div class="permission-section-heading">
+            <strong>工具权限</strong>
+            <span>为「{{ form.name || '该 Agent' }}」配置「允许 / 询问 / 拒绝」三级权限。</span>
           </div>
-        </el-form-item>
-        <el-form-item label="Agent 配色">
-          <div class="color-picker">
-            <button v-for="preset in agentColorPresets" :key="preset.key" class="color-choice"
-              :class="{ active: form.color === preset.color }" :style="{ background: preset.color }"
-              :title="preset.label" type="button" @click="form.color = preset.color" />
+
+          <div v-loading="permissionsLoading" class="permission-groups">
+            <div v-for="group in groupedPermissions" :key="group.name" class="permission-group">
+              <div class="permission-group-title">
+                <strong>{{ groupLabel(group.name) }}</strong>
+                <span>{{ group.entries.length }} 个工具</span>
+              </div>
+              <div v-for="entry in group.entries" :key="toolKey(entry)" class="permission-row">
+                <div>
+                  <strong>{{ entry.tool.name }}</strong>
+                  <span>{{ entry.tool.description }}</span>
+                </div>
+                <el-select v-model="entry.permission" class="permission-level" aria-label="工具权限" size="small">
+                  <el-option label="允许" value="allow" />
+                  <el-option label="询问" value="ask" />
+                  <el-option label="拒绝" value="deny" />
+                </el-select>
+              </div>
+            </div>
+            <div v-if="!permissionsLoading && !permissionEntries.length" class="permission-empty">暂无可配置的工具。</div>
           </div>
-        </el-form-item>
-        <el-form-item label="所属学科" prop="subject">
-          <el-input v-model="form.subject" placeholder="例如：计算机" />
-        </el-form-item>
-        <el-form-item label="职责描述" prop="description">
-          <el-input v-model="form.description" :rows="3" type="textarea" />
-        </el-form-item>
-        <el-form-item label="能力标签">
-          <el-input v-model="form.capabilities" placeholder="用逗号分隔，例如：课程知识, 习题解析" />
-        </el-form-item>
-      </el-form>
+        </section>
+      </div>
+
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button :loading="saving" type="primary" @click="saveAgent">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="permissionDialogVisible" title="Agent 权限管理" width="min(520px, 92vw)">
-      <div class="permission-list">
-        <div v-for="permission in permissions" :key="permission.key" class="permission-row">
-          <div>
-            <strong>{{ permission.label }}</strong>
-            <span>{{ permission.description }}</span>
-          </div>
-           <el-switch v-model="permission.enabled" />
-        </div>
-      </div>
-      <template #footer>
-        <el-button :loading="permissionLoading" type="primary" @click="savePermissions">完成</el-button>
       </template>
     </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -121,16 +112,23 @@ import PageHeader from '../components/common/PageHeader.vue'
 import {
   createAgent,
   deleteAgent,
-  getAgentPermissions,
+  getAgentToolPermissions,
   listAgents,
-  setAgentEnabled,
+  listTools,
   updateAgent,
-  updateAgentPermissions,
 } from '../services/agent'
-import type { AgentConfigInput, AgentInfo, AgentPermission, AgentType } from '../types/chat'
+import type {
+  AgentConfigInput,
+  AgentInfo,
+  AgentToolPermission,
+  AgentToolPermissionInput,
+  AgentType,
+  ToolPermission,
+} from '../types/chat'
 
-interface AgentForm extends Omit<AgentConfigInput, 'capabilities' | 'icon' | 'color'> {
-  capabilities: string
+interface AgentForm {
+  name: string
+  description: string
   icon: string
   color: string
 }
@@ -139,37 +137,62 @@ const emit = defineEmits<{
   'start-chat': [agent: AgentType]
 }>()
 
+/** 工具组的中文名，未知组回退为原始组名。 */
+const toolGroupLabels: Record<string, string> = {
+  anki: 'Anki 卡片',
+  asset: '学习资产',
+  user: '用户交互',
+}
+
 const agents = ref<AgentInfo[]>([])
-const permissions = ref<AgentPermission[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
-const permissionLoading = ref(false)
 
 const dialogVisible = ref(false)
-const permissionDialogVisible = ref(false)
-const editingAgentId = ref<string | null>(null)
+const editingAgentId = ref<AgentType | null>(null)
 const saving = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<AgentForm>({
   name: '',
-  subject: '',
   description: '',
-  capabilities: '',
   icon: defaultAgentIcon,
   color: defaultAgentColor,
 })
 
 const rules: FormRules<AgentForm> = {
   name: [{ required: true, message: '请输入 Agent 名称', trigger: 'blur' }],
-  subject: [{ required: true, message: '请输入所属学科', trigger: 'blur' }],
   description: [{ required: true, message: '请输入职责描述', trigger: 'blur' }],
+}
+
+const permissionsLoading = ref(false)
+const permissionEntries = ref<AgentToolPermission[]>([])
+
+const groupedPermissions = computed(() => {
+  const groups: { name: string; entries: AgentToolPermission[] }[] = []
+
+  for (const entry of permissionEntries.value) {
+    let group = groups.find(item => item.name === entry.tool.group)
+    if (!group) {
+      group = { name: entry.tool.group, entries: [] }
+      groups.push(group)
+    }
+    group.entries.push(entry)
+  }
+
+  return groups
+})
+
+function groupLabel(name: string) {
+  return toolGroupLabels[name] ?? name
+}
+
+function toolKey(entry: AgentToolPermission) {
+  return `${entry.tool.group}.${entry.tool.id}`
 }
 
 function resetForm() {
   form.name = ''
-  form.subject = ''
   form.description = ''
-  form.capabilities = ''
   form.icon = defaultAgentIcon
   form.color = defaultAgentColor
 }
@@ -178,17 +201,34 @@ function openCreateDialog() {
   editingAgentId.value = null
   resetForm()
   dialogVisible.value = true
+  void loadToolPermissions(null)
 }
 
 function editAgent(agent: AgentInfo) {
   editingAgentId.value = agent.id
   form.name = agent.name
-  form.subject = agent.subject
   form.description = agent.description
-  form.capabilities = agent.capabilities.join(', ')
   form.icon = agent.icon || defaultAgentIcon
   form.color = agent.color || defaultAgentColor
   dialogVisible.value = true
+  void loadToolPermissions(agent.id)
+}
+
+/** 编辑时读取该 Agent 的逐项生效级别；新建时按「未配置等价于拒绝」填充工具目录。 */
+async function loadToolPermissions(agentId: AgentType | null) {
+  permissionsLoading.value = true
+  permissionEntries.value = []
+
+  try {
+    permissionEntries.value = agentId === null
+      ? (await listTools()).map(tool => ({ tool, permission: 'deny' as ToolPermission }))
+      : await getAgentToolPermissions(agentId)
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('工具权限加载失败，请重试。')
+  } finally {
+    permissionsLoading.value = false
+  }
 }
 
 async function saveAgent() {
@@ -203,36 +243,29 @@ async function saveAgent() {
   }
 
   saving.value = true
-  const capabilities = form.capabilities
-    .split(',')
-    .map(item => item.trim())
-    .filter(Boolean)
+  const toolPermissions: AgentToolPermissionInput[] = permissionEntries.value.map(entry => ({
+    toolId: toolKey(entry),
+    permission: entry.permission,
+  }))
+
+  const input: AgentConfigInput = {
+    name: form.name.trim(),
+    description: form.description.trim(),
+    icon: form.icon,
+    color: form.color,
+    ...(toolPermissions.length ? { toolPermissions } : {}),
+  }
 
   try {
-    if (editingAgentId.value) {
-      const updatedAgent = await updateAgent(editingAgentId.value, {
-        name: form.name.trim(),
-        subject: form.subject.trim(),
-        description: form.description.trim(),
-        capabilities,
-        icon: form.icon,
-        color: form.color,
-      })
+    if (editingAgentId.value !== null) {
+      const updatedAgent = await updateAgent(editingAgentId.value, input)
       const index = agents.value.findIndex(item => item.id === editingAgentId.value)
       if (index !== -1) {
         agents.value[index] = updatedAgent
       }
       ElMessage.success('Agent 配置已更新')
     } else {
-      const createdAgent = await createAgent({
-        name: form.name.trim(),
-        subject: form.subject.trim(),
-        description: form.description.trim(),
-        capabilities,
-        icon: form.icon,
-        color: form.color,
-      })
-      agents.value.push(createdAgent)
+      agents.value.push(await createAgent(input))
       ElMessage.success('自定义 Agent 已创建')
     }
     dialogVisible.value = false
@@ -244,28 +277,8 @@ async function saveAgent() {
   }
 }
 
-async function toggleAgent(agent: AgentInfo, value: string | number | boolean) {
-  const enabled = Boolean(value)
-  if (enabled === agent.enabled) {
-    return
-  }
-
-  try {
-    const updatedAgent = await setAgentEnabled(agent.id, enabled)
-    Object.assign(agent, updatedAgent)
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('Agent 状态更新失败，请重试。')
-  }
-}
-
 function startAgent(agent: AgentInfo) {
-  if (agent.enabled) {
-    emit('start-chat', agent.id)
-    return
-  }
-
-  ElMessage.info('请先启用这个 Agent。')
+  emit('start-chat', agent.id)
 }
 
 async function removeAgent(agent: AgentInfo) {
@@ -280,34 +293,6 @@ async function removeAgent(agent: AgentInfo) {
   } catch (error) {
     console.error(error)
     ElMessage.error('Agent 删除失败，请重试。')
-  }
-}
-
-async function openPermissionDialog() {
-  permissionDialogVisible.value = true
-  permissionLoading.value = true
-
-  try {
-    permissions.value = await getAgentPermissions()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('权限加载失败，请重试。')
-  } finally {
-    permissionLoading.value = false
-  }
-}
-
-async function savePermissions() {
-  permissionLoading.value = true
-  try {
-    permissions.value = await updateAgentPermissions(permissions.value)
-    permissionDialogVisible.value = false
-    ElMessage.success('Agent 权限已更新')
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('权限保存失败，请重试。')
-  } finally {
-    permissionLoading.value = false
   }
 }
 
@@ -345,7 +330,6 @@ onMounted(loadAgents)
 
 .agent-card-heading,
 .agent-card-footer,
-.permission-card,
 .permission-row {
   display: flex;
   align-items: center;
@@ -441,12 +425,6 @@ onMounted(loadAgents)
   line-height: 1.6;
 }
 
-.agent-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .agent-card-footer {
   justify-content: flex-end;
   gap: 4px;
@@ -455,34 +433,72 @@ onMounted(loadAgents)
   border-top: 1px solid var(--learning-border);
 }
 
-.permission-card {
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 15px;
-  border-color: var(--learning-border);
-  box-shadow: var(--learning-shadow);
+.agent-config {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
 }
 
-.permission-card strong {
+.agent-config-form {
+  min-width: 0;
+  flex: 0 0 300px;
+}
+
+.permission-section {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-left: 24px;
+  border-left: 1px solid var(--learning-border);
+}
+
+.permission-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.permission-section-heading strong {
   color: var(--learning-text);
   font-size: 13px;
 }
 
-.permission-card p {
-  margin: 5px 0 0;
+.permission-section-heading span {
   color: var(--learning-text-muted);
   font-size: 10px;
 }
 
-.permission-list {
+.permission-groups {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.permission-group+.permission-group {
+  margin-top: 14px;
+}
+
+.permission-group-title {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--learning-border);
+}
+
+.permission-group-title strong {
+  color: var(--learning-text);
+  font-size: 12px;
+}
+
+.permission-group-title span {
+  color: var(--learning-text-muted);
+  font-size: 10px;
 }
 
 .permission-row {
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 0;
+  padding: 11px 0;
   border-bottom: 1px solid var(--learning-border);
 }
 
@@ -492,13 +508,14 @@ onMounted(loadAgents)
 
 .permission-row>div {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .permission-row strong {
   color: var(--learning-text);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .permission-row span {
@@ -506,14 +523,41 @@ onMounted(loadAgents)
   font-size: 11px;
 }
 
+.permission-level {
+  flex: 0 0 auto;
+  width: 96px;
+}
+
+.permission-empty {
+  padding: 18px 0;
+  color: var(--learning-text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .agent-config {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .agent-config-form,
+  .permission-section {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .permission-section {
+    padding-top: 16px;
+    padding-left: 0;
+    border-top: 1px solid var(--learning-border);
+    border-left: 0;
+  }
+}
+
 @media (max-width: 620px) {
   .page-frame {
     padding: 22px 14px 36px;
-  }
-
-  .permission-card {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 </style>

@@ -31,9 +31,14 @@ fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
 /// 只执行编号大于当前版本的文件，且版本号推进与 SQL 执行在同一事务内提交，
 /// 迁移失败时整体回滚，下次启动会重试同一个文件。
 pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
+    migrate_with(conn, MIGRATIONS)
+}
+
+/// 迁移执行核心；迁移清单可注入，便于测试失败回滚等边界行为。
+fn migrate_with(conn: &mut Connection, migrations: &[(u32, &str)]) -> rusqlite::Result<()> {
     let current: u32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
-    for (number, sql) in MIGRATIONS.iter() {
+    for (number, sql) in migrations.iter() {
         if *number <= current {
             continue;
         }
@@ -44,4 +49,74 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn user_version(conn: &Connection) -> u32 {
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    fn latest_version() -> u32 {
+        MIGRATIONS.iter().map(|(number, _)| *number).max().unwrap_or(0)
+    }
+
+    #[test]
+    fn fresh_database_applies_all_migrations() {
+        let conn = open_in_memory().unwrap();
+        assert_eq!(user_version(&conn), latest_version());
+
+        // 000001 与 000002 建立的表都存在，且内置数据已播种。
+        let decks: i64 = conn
+            .query_row("SELECT COUNT(*) FROM deck", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(decks, 0);
+        let agents: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(agents, 2);
+        let tools: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tool", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(tools, 14);
+    }
+
+    #[test]
+    fn migrate_is_idempotent_for_applied_versions() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn).unwrap();
+        // 二次执行不会重放已应用的迁移，否则 UNIQUE / 主键会冲突。
+        migrate(&mut conn).unwrap();
+        assert_eq!(user_version(&conn), latest_version());
+
+        let agents: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(agents, 2);
+    }
+
+    #[test]
+    fn failed_migration_rolls_back_and_keeps_version() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let migrations: &[(u32, &str)] = &[
+            (1, "CREATE TABLE demo (id INTEGER PRIMARY KEY);"),
+            (
+                2,
+                "INSERT INTO demo VALUES (1); INSERT INTO missing_table VALUES (1);",
+            ),
+        ];
+
+        assert!(migrate_with(&mut conn, migrations).is_err());
+
+        // 版本号停在已成功提交的 1，失败文件未推进；文件内的插入也一并回滚。
+        assert_eq!(user_version(&conn), 1);
+        let demo: i64 = conn
+            .query_row("SELECT COUNT(*) FROM demo", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(demo, 0);
+    }
 }

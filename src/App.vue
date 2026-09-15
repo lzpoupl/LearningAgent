@@ -121,7 +121,7 @@ function navigate(view: AppView) {
 // 回到新会话状态：不挂载任何会话，由左上的助手选择器决定下一步
 function clearActiveSession() {
   currentSessionId.value = ''
-  currentAgent.value = ''
+  currentAgent.value = 0
 }
 
 function openChatWith(agent: AgentType) {

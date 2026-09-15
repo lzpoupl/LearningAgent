@@ -1,158 +1,283 @@
 import type {
   AssetKind,
   AssetQuery,
+  Bucket,
   LearningAsset,
   UploadAssetRequest,
+  UploadImageRequest,
+  UploadedImage,
 } from '../types/assets'
 
 function nowIso(): string {
   return new Date().toISOString()
 }
 
-function dataUrl(content: string): string {
-  return `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`
+function dataUrl(mimeType: string, contentBase64: string): string {
+  return `data:${mimeType};base64,${contentBase64}`
 }
+
+function extensionOf(name: string): string {
+  return name.split('.').pop()?.toLowerCase() || ''
+}
+
+function kindOf(extension: string): AssetKind {
+  if (extension === 'pdf') return 'pdf'
+  if (extension === 'ppt' || extension === 'pptx') return 'slides'
+  if (extension === 'md' || extension === 'markdown' || extension === 'txt') return 'note'
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension)) return 'image'
+  if (extension === 'doc' || extension === 'docx') return 'document'
+  return 'other'
+}
+
+function typeLabelOf(kind: AssetKind): string {
+  if (kind === 'pdf') return 'PDF 文档'
+  if (kind === 'slides') return '演示文稿'
+  if (kind === 'note') return '笔记'
+  if (kind === 'image') return '图片'
+  if (kind === 'document') return '文档'
+  return '其他'
+}
+
+function mimeTypeOf(extension: string): string {
+  if (extension === 'pdf') return 'application/pdf'
+  if (extension === 'ppt') return 'application/vnd.ms-powerpoint'
+  if (extension === 'pptx') {
+    return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  }
+  if (extension === 'md' || extension === 'markdown') return 'text/markdown'
+  if (extension === 'txt') return 'text/plain'
+  if (extension === 'png') return 'image/png'
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg'
+  if (extension === 'webp') return 'image/webp'
+  if (extension === 'gif') return 'image/gif'
+  if (extension === 'doc') return 'application/msword'
+  if (extension === 'docx') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+  return 'application/octet-stream'
+}
+
+const seedBuckets: Bucket[] = [
+  {
+    id: 1,
+    name: '资料',
+    rootPath: 'C:\\Users\\you\\LearningAgent\\资料',
+    assetCount: 4,
+    createdAt: new Date(Date.now() - 6 * 24 * 3_600_000).toISOString(),
+    updatedAt: nowIso(),
+  },
+]
 
 const seedAssets: LearningAsset[] = [
   {
-    id: 'asset-math-foundation',
+    id: '/资料/高等数学基础.pdf',
     name: '高等数学基础.pdf',
-    extension: 'PDF',
+    extension: 'pdf',
     typeLabel: 'PDF 文档',
     kind: 'pdf',
-    subject: '数学',
     size: 2_400_000,
     mimeType: 'application/pdf',
     addedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
-    url: dataUrl('Mock: 高等数学基础'),
   },
   {
-    id: 'asset-english-vocabulary',
+    id: '/资料/考研英语词汇.pdf',
     name: '考研英语词汇.pdf',
-    extension: 'PDF',
+    extension: 'pdf',
     typeLabel: 'PDF 文档',
     kind: 'pdf',
-    subject: '英语',
     size: 1_800_000,
     mimeType: 'application/pdf',
     addedAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
-    url: dataUrl('Mock: 考研英语词汇'),
   },
   {
-    id: 'asset-os-process',
+    id: '/资料/进程管理课件.pptx',
     name: '进程管理课件.pptx',
-    extension: 'PPTX',
+    extension: 'pptx',
     typeLabel: '演示文稿',
     kind: 'slides',
-    subject: '操作系统',
     size: 4_200_000,
     mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     addedAt: new Date(Date.now() - 3 * 24 * 3_600_000).toISOString(),
-    url: dataUrl('Mock: 进程管理课件'),
   },
   {
-    id: 'asset-math-notes',
+    id: '/资料/极限与导数笔记.md',
     name: '极限与导数笔记.md',
-    extension: 'MD',
+    extension: 'md',
     typeLabel: '笔记',
     kind: 'note',
-    subject: '数学',
     size: 24_000,
     mimeType: 'text/markdown',
     addedAt: new Date(Date.now() - 5 * 24 * 3_600_000).toISOString(),
-    url: dataUrl('Mock: 极限与导数笔记'),
   },
 ]
+
+function cloneBucket(bucket: Bucket): Bucket {
+  return { ...bucket }
+}
 
 function cloneAsset(asset: LearningAsset): LearningAsset {
   return { ...asset }
 }
 
-function normalizeKind(extension: string): AssetKind {
-  if (extension === 'PDF') return 'pdf'
-  if (extension === 'PPT' || extension === 'PPTX') return 'slides'
-  if (extension === 'MD' || extension === 'MARKDOWN' || extension === 'TXT') return 'note'
-  if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return 'image'
-  return 'document'
-}
-
-function typeLabel(kind: AssetKind): string {
-  if (kind === 'pdf') return 'PDF 文档'
-  if (kind === 'slides') return '演示文稿'
-  if (kind === 'note') return '笔记'
-  if (kind === 'image') return '图片'
-  return '文档'
-}
-
-function extensionOf(name: string): string {
-  return name.split('.').pop()?.toUpperCase() || 'FILE'
-}
-
-/** 内存版学习资料后端，负责资料元数据和上传内容的开发期响应。 */
+/** 内存版资产后端：bucket 映射与资产元数据（资产 id 为 `/<bucket>/<path>`）。 */
 export class AssetMock {
-  private assets = new Map(seedAssets.map(asset => [asset.id, cloneAsset(asset)]))
-  private nextAssetId = 1
+  private buckets = new Map<number, Bucket>(seedBuckets.map(bucket => [bucket.id, cloneBucket(bucket)]))
+  private assets = new Map<string, LearningAsset>(seedAssets.map(asset => [asset.id, cloneAsset(asset)]))
+  private nextBucketId = seedBuckets.length + 1
 
   handle(cmd: string, payload: Record<string, unknown>): unknown {
     switch (cmd) {
+      case 'bucket_list':
+        return this.listBuckets()
+      case 'bucket_create':
+        return this.createBucket(String(payload.name ?? ''), String(payload.rootPath ?? ''))
+      case 'bucket_update':
+        return this.updateBucket(
+          Number(payload.id ?? 0),
+          payload.name === undefined ? undefined : String(payload.name),
+          payload.rootPath === undefined ? undefined : String(payload.rootPath),
+        )
+      case 'bucket_delete':
+        return this.deleteBucket(Number(payload.id ?? 0))
       case 'asset_list':
         return this.list((payload.query ?? {}) as AssetQuery)
-      case 'asset_list_subjects':
-        return this.listSubjects()
       case 'asset_upload':
         return this.upload((payload.input ?? {}) as Partial<UploadAssetRequest>)
       case 'asset_get_url':
         return this.getUrl(String(payload.assetId ?? ''))
       case 'asset_delete':
         return this.delete(String(payload.assetId ?? ''))
+      case 'asset_upload_image':
+        return this.uploadImage((payload.input ?? {}) as Partial<UploadImageRequest>)
       default:
         return undefined
     }
   }
 
-  private list(query: AssetQuery): LearningAsset[] {
-    let assets = [...this.assets.values()]
-    if (query.subject) {
-      assets = assets.filter(asset => asset.subject === query.subject)
-    }
+  // ---- bucket ----
 
-    if (query.sortBy === 'name') {
-      assets.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
-    } else if (query.sortBy === 'size') {
-      assets.sort((left, right) => right.size - left.size)
-    } else {
-      assets.sort((left, right) => right.addedAt.localeCompare(left.addedAt))
-    }
-
-    return assets.map(cloneAsset)
+  private listBuckets(): Bucket[] {
+    return [...this.buckets.values()]
+      .map(bucket => this.withCount(bucket))
+      .sort((left, right) => left.id - right.id)
   }
 
-  private listSubjects(): string[] {
-    return [...new Set([...this.assets.values()].map(asset => asset.subject))]
+  private withCount(bucket: Bucket): Bucket {
+    return { ...bucket, assetCount: this.assetsFor(bucket.name).length }
+  }
+
+  private requireBucket(id: number): Bucket {
+    const bucket = this.buckets.get(id)
+    if (!bucket) {
+      throw new Error(`bucket 不存在: ${id}`)
+    }
+    return bucket
+  }
+
+  private findBucketByName(name: string): Bucket | undefined {
+    return [...this.buckets.values()].find(bucket => bucket.name === name)
+  }
+
+  private createBucket(name: string, rootPath: string): Bucket {
+    const trimmedName = name.trim()
+    const trimmedRoot = rootPath.trim()
+    if (!trimmedName || !trimmedRoot) {
+      throw new Error('bucket 名称或目录不能为空')
+    }
+    if (this.findBucketByName(trimmedName)) {
+      throw new Error(`bucket 名称已存在: ${trimmedName}`)
+    }
+
+    const bucket: Bucket = {
+      id: this.nextBucketId++,
+      name: trimmedName,
+      rootPath: trimmedRoot,
+      assetCount: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    }
+    this.buckets.set(bucket.id, bucket)
+    return cloneBucket(bucket)
+  }
+
+  private updateBucket(id: number, name?: string, rootPath?: string): Bucket {
+    const current = this.requireBucket(id)
+    const nextName = name === undefined ? current.name : name.trim()
+    const nextRoot = rootPath === undefined ? current.rootPath : rootPath.trim()
+    if (!nextName || !nextRoot) {
+      throw new Error('bucket 名称或目录不能为空')
+    }
+    const clash = this.findBucketByName(nextName)
+    if (clash && clash.id !== id) {
+      throw new Error(`bucket 名称已存在: ${nextName}`)
+    }
+
+    const updated: Bucket = { ...current, name: nextName, rootPath: nextRoot, updatedAt: nowIso() }
+    this.buckets.set(id, updated)
+    return this.withCount(updated)
+  }
+
+  private deleteBucket(id: number): void {
+    if (!this.buckets.delete(id)) {
+      throw new Error(`bucket 不存在: ${id}`)
+    }
+  }
+
+  // ---- 资产 ----
+
+  private assetsFor(bucketName: string): LearningAsset[] {
+    const prefix = `/${bucketName}/`
+    return [...this.assets.values()].filter(asset => asset.id.startsWith(prefix))
+  }
+
+  private list(query: AssetQuery): LearningAsset[] {
+    const buckets = query.bucket
+      ? [this.requireBucketName(query.bucket)]
+      : [...this.buckets.values()]
+
+    const assets = buckets.flatMap(bucket => this.assetsFor(bucket.name))
+    const sorted = [...assets]
+
+    if (query.sortBy === 'name') {
+      sorted.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+    } else if (query.sortBy === 'size') {
+      sorted.sort((left, right) => right.size - left.size)
+    } else {
+      sorted.sort((left, right) => right.addedAt.localeCompare(left.addedAt))
+    }
+
+    return sorted.map(cloneAsset)
+  }
+
+  private requireBucketName(name: string): Bucket {
+    const bucket = this.findBucketByName(name)
+    if (!bucket) {
+      throw new Error(`bucket 不存在: ${name}`)
+    }
+    return bucket
   }
 
   private upload(input: Partial<UploadAssetRequest>): LearningAsset {
     const name = String(input.name ?? '').trim()
-    const subject = String(input.subject ?? '').trim()
-    const mimeType = String(input.mimeType ?? 'application/octet-stream')
     const contentBase64 = String(input.contentBase64 ?? '')
-    if (!name || !subject || !contentBase64) {
+    if (!name || !contentBase64) {
       throw new Error('资料上传参数不完整')
     }
+    const bucket = this.requireBucketName(String(input.bucket ?? ''))
 
     const extension = extensionOf(name)
-    const kind = normalizeKind(extension)
+    const kind = kindOf(extension)
+    const mimeType = String(input.mimeType ?? '') || mimeTypeOf(extension)
     const asset: LearningAsset = {
-      id: `asset-upload-${this.nextAssetId++}`,
+      id: `/${bucket.name}/${name}`,
       name,
       extension,
-      typeLabel: typeLabel(kind),
+      typeLabel: typeLabelOf(kind),
       kind,
-      subject,
       size: Number(input.size ?? 0),
       mimeType,
       addedAt: nowIso(),
-      url: `data:${mimeType};base64,${contentBase64}`,
+      url: dataUrl(mimeType, contentBase64),
     }
     this.assets.set(asset.id, asset)
     return cloneAsset(asset)
@@ -170,5 +295,35 @@ export class AssetMock {
     if (!this.assets.delete(assetId)) {
       throw new Error(`学习资料不存在: ${assetId}`)
     }
+  }
+
+  private uploadImage(input: Partial<UploadImageRequest>): UploadedImage {
+    const name = String(input.name ?? '').trim()
+    const mimeType = String(input.mimeType ?? '')
+    const contentBase64 = String(input.contentBase64 ?? '')
+    if (!name || !mimeType.startsWith('image/') || !contentBase64) {
+      throw new Error('图片上传参数不完整')
+    }
+
+    const bucket = [...this.buckets.values()].sort((left, right) => left.id - right.id)[0]
+    if (!bucket) {
+      throw new Error('尚未配置任何 bucket，无法上传图片')
+    }
+
+    const extension = extensionOf(name)
+    const asset: LearningAsset = {
+      id: `/${bucket.name}/images/${name}`,
+      name,
+      extension,
+      typeLabel: '图片',
+      kind: 'image',
+      size: contentBase64.length,
+      mimeType,
+      addedAt: nowIso(),
+      url: dataUrl(mimeType, contentBase64),
+    }
+    this.assets.set(asset.id, asset)
+
+    return { name, url: asset.url ?? '' }
   }
 }

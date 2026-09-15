@@ -62,13 +62,13 @@ import { ElMessageBox } from 'element-plus'
 import { Delete, EditPen, MoreFilled } from '@element-plus/icons-vue'
 
 import AgentIcon from '../agent/AgentIcon.vue'
-import type { AgentInfo, ChatSession } from '../../types/chat'
+import type { AgentInfo, AgentType, ChatSession } from '../../types/chat'
 
 const props = defineProps<{
   agents: AgentInfo[]
   sessions: ChatSession[]
   currentSessionId: string
-  defaultAgentId?: string
+  defaultAgentId?: AgentType
 }>()
 
 const emit = defineEmits<{
@@ -77,7 +77,7 @@ const emit = defineEmits<{
   'delete-session': [sessionId: string]
 }>()
 
-const scopeAgent = ref(props.defaultAgentId || props.agents[0]?.id || '')
+const scopeAgent = ref<AgentType>(props.defaultAgentId || props.agents[0]?.id || 0)
 
 const historySessions = computed(() =>
   props.sessions.filter(session => session.agent === scopeAgent.value)

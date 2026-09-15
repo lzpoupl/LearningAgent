@@ -10,13 +10,22 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 use crate::config::ConfigHandle;
+use crate::service::agent::AgentService;
 use crate::service::anki::AnkiService;
+use crate::service::asset::AssetService;
 use crate::service::scheduler::SchedulerRegistry;
+use crate::service::tool::ToolRegistry;
 
 /// 应用全局共享状态。
 pub struct AppState {
     /// Anki 服务：数据库连接、调度算法注册表与配置句柄在启动时构建一次。
     pub anki: AnkiService,
+    /// Agent 服务：Agent 配置与工具权限编排。
+    pub agent: AgentService,
+    /// 资产服务：bucket 映射与非结构化资产读写。
+    pub asset: AssetService,
+    /// 工具实现注册表：本阶段为空，各 service 共享同一实例。
+    pub tool_registry: Arc<ToolRegistry>,
     /// 全局配置句柄：与各层注入的句柄共享同一份配置。
     pub config: ConfigHandle,
 }
@@ -43,12 +52,24 @@ pub fn run() {
                 repository::db::open(data_dir.join("learningagent.db"))?
             };
 
+            let db = Arc::new(Mutex::new(conn));
+            let tool_registry = Arc::new(ToolRegistry::new());
+
             let anki = AnkiService::new(
-                Arc::new(Mutex::new(conn)),
+                db.clone(),
                 Arc::new(SchedulerRegistry::new()),
                 config.clone(),
             );
-            let _ = app.manage(AppState { anki, config });
+            let agent = AgentService::new(db.clone(), tool_registry.clone(), config.clone());
+            let asset = AssetService::new(db.clone());
+
+            let _ = app.manage(AppState {
+                anki,
+                agent,
+                asset,
+                tool_registry,
+                config,
+            });
             Ok(())
         })
         .invoke_handler(controller_handlers!())

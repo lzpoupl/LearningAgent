@@ -142,12 +142,11 @@ const taskUpdating = ref('')
 
 const quickActions = computed<QuickAction[]>(() => {
   const agentActions = agents.value
-    .filter(agent => agent.enabled)
     .slice(0, 2)
     .map((agent, index) => ({
       agentIcon: agent.icon,
       title: agent.name,
-      description: agent.capabilities.slice(0, 2).join(' · ') || agent.description,
+      description: agent.description,
       theme: index === 0 ? ('blue' as const) : ('green' as const),
       agent: agent.id,
     }))

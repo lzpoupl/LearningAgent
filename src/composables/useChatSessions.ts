@@ -26,7 +26,7 @@ function createTextMessage(role: ChatMessage['role'], content: string): ChatMess
 export function useChatSessions() {
   const sessions = ref<ChatSession[]>([])
   const currentSessionId = ref('')
-  const currentAgent = ref<AgentType>('')
+  const currentAgent = ref<AgentType>(0)
   const loading = ref(false)
 
   const currentSession = computed(() =>
@@ -158,7 +158,7 @@ export function useChatSessions() {
 
       const nextSession = sessions.value[0]
       currentSessionId.value = nextSession?.id ?? ''
-      currentAgent.value = nextSession?.agent ?? ''
+      currentAgent.value = nextSession?.agent ?? 0
     } catch (error) {
       console.error(error)
       throw error
