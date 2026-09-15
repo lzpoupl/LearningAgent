@@ -26,10 +26,21 @@ fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// 按 `PRAGMA user_version` 记录的编号增量执行迁移。
+///
+/// 只执行编号大于当前版本的文件，且版本号推进与 SQL 执行在同一事务内提交，
+/// 迁移失败时整体回滚，下次启动会重试同一个文件。
 pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
+    let current: u32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
-    for sql in MIGRATIONS.iter() {
-        conn.execute_batch(sql)?;
+    for (number, sql) in MIGRATIONS.iter() {
+        if *number <= current {
+            continue;
+        }
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", *number as i64)?;
+        tx.commit()?;
     }
 
     Ok(())
