@@ -68,8 +68,8 @@
     - 展示 Agent 工具调用结果。
 - `src/components/chat/ChatMessage.vue`
     - 根据消息角色选择用户或 AI 消息组件。
-- `src/components/chat/ChatContextPanel.vue`
-    - 展示当前 Agent 可访问的学习资产和权限。
+- `src/components/chat/ChatHistoryPanel.vue`
+    - 按学习助手筛选历史会话，支持切换、重命名和删除。
 - `src/components/anki/CardContent.vue`
     - 统一处理 Anki 卡片的 Markdown、LaTeX 和安全 HTML 渲染。
 - `src/components/anki/CardShow.vue`

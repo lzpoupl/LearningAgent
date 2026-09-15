@@ -30,20 +30,8 @@
             <h1>开始新的学习</h1>
             <p class="subtitle">选择一个学习助手，然后输入你想学习的问题</p>
 
-            <el-select v-model="selectedAgent" class="agent-select" popper-class="agent-select-popper"
-              placeholder="请选择学习助手" :disabled="!agents.length">
-              <template #prefix>
-                <AgentIcon v-if="selectedAgentInfo" :color="selectedAgentInfo.color" :icon="selectedAgentInfo.icon"
-                  :size="18" />
-              </template>
-              <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
-                <span class="agent-option-label">
-                  <AgentIcon :color="agent.color" :icon="agent.icon" :size="20" />
-                  {{ agent.name }}
-                </span>
-                <span class="agent-option-value">{{ agent.description }}</span>
-              </el-option>
-            </el-select>
+            <AgentSelect v-model="selectedAgent" class="agent-select" :agents="agents" :disabled="!agents.length"
+              placeholder="请选择学习助手" show-description />
             <p v-if="agentsError" class="intro-error" role="alert">{{ agentsError }}</p>
           </div>
 
@@ -76,7 +64,7 @@
         </template>
       </el-card>
 
-      <ChatContextPanel :agents="agents" :current-session-id="currentSessionId" :default-agent-id="conversationAgent"
+      <ChatHistoryPanel :agents="agents" :current-session-id="currentSessionId" :default-agent-id="conversationAgent"
         :sessions="sessions" @delete-session="emit('delete-session', $event)"
         @rename-session="(sessionId, title) => emit('rename-session', sessionId, title)"
         @select-session="emit('select-session', $event)" />
@@ -89,7 +77,8 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Loading, Plus, Promotion } from '@element-plus/icons-vue'
 
 import AgentIcon from '../components/agent/AgentIcon.vue'
-import ChatContextPanel from '../components/chat/ChatContextPanel.vue'
+import AgentSelect from '../components/agent/AgentSelect.vue'
+import ChatHistoryPanel from '../components/chat/ChatHistoryPanel.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 import { getAgent, listAgents } from '../services/agent'
 import type { AgentInfo, AgentType, ChatSession } from '../types/chat'
@@ -121,7 +110,6 @@ const messageContainer = ref<HTMLElement | null>(null)
 const currentAgentInfo = ref<AgentInfo | null>(null)
 const currentMessages = computed(() => props.currentSession?.messages ?? [])
 const activeAgent = computed(() => (props.currentSession ? props.currentAgent : selectedAgent.value))
-const selectedAgentInfo = computed(() => agents.value.find(agent => agent.id === selectedAgent.value) ?? null)
 // 右栏只跟随当前打开的会话，左上手选助手不会带动它
 const conversationAgent = computed(() => props.currentSession?.agent ?? 0)
 const agentError = ref('')
@@ -391,27 +379,6 @@ onMounted(loadAgents)
 .new-session-intro .agent-select {
   width: min(420px, 100%);
   margin-top: 22px;
-}
-
-.agent-option-label {
-  display: inline-flex;
-  float: left;
-  align-items: center;
-  gap: 8px;
-}
-
-.agent-option-value {
-  float: right;
-  color: #8492a6;
-  font-size: 13px;
-}
-
-/* 下拉选项留出图标与右对齐描述的空间 */
-:global(.agent-select-popper .el-select-dropdown__item) {
-  height: auto;
-  min-height: 40px;
-  padding: 8px 16px;
-  line-height: 1.5;
 }
 
 .intro-error {

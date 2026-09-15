@@ -6,15 +6,8 @@
 
     <div class="scope-row">
       <span class="scope-label">查看助手</span>
-      <el-select v-model="scopeAgent" class="agent-filter" placeholder="选择学习助手" size="small"
-        :disabled="!agents.length">
-        <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
-          <span class="agent-option">
-            <AgentIcon :color="agent.color" :icon="agent.icon" :size="18" />
-            {{ agent.name }}
-          </span>
-        </el-option>
-      </el-select>
+      <AgentSelect v-model="scopeAgent" class="agent-filter" :agents="agents" :disabled="!agents.length" size="small"
+        placeholder="选择学习助手" />
     </div>
 
     <div v-if="!historySessions.length" class="panel-state">该学习助手还没有历史会话</div>
@@ -61,8 +54,8 @@ import { computed, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Delete, EditPen, MoreFilled } from '@element-plus/icons-vue'
 
-import AgentIcon from '../agent/AgentIcon.vue'
-import type { AgentInfo, AgentType, ChatSession } from '../../types/chat'
+import AgentSelect from '../agent/AgentSelect.vue'
+import type { AgentInfo, AgentType, ChatSession } from '../../types/chat.ts'
 
 const props = defineProps<{
   agents: AgentInfo[]
@@ -198,12 +191,6 @@ async function removeSession(session: ChatSession) {
 .agent-filter {
   min-width: 0;
   flex: 1;
-}
-
-.agent-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .panel-state {
