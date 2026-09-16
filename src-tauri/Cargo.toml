@@ -27,9 +27,13 @@ config = "0.15"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = "0.4"
 base64 = "0.22"
+edgee = "2.0"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+mockito = "1.5"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
