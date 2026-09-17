@@ -381,12 +381,12 @@ impl SessionService {
 
 // config/llm.rs
 pub struct LlmConfig {
-    pub default_provider: String,
+    pub default_provider: Option<String>,                 // 未配置时为 None
     pub max_steps: u32,                                   // 单轮循环步数上限，默认 8
     pub request_timeout_seconds: u64,                     // 默认 120
     pub max_retries: u32,                                 // 默认 2
     pub allow_streaming: bool,                            // 默认 true
-    pub providers: HashMap<String, ProviderConfig>,
+    pub providers: HashMap<String, ProviderConfig>,       // 默认空表，可在设置页新增
 }
 
 pub struct ProviderConfig {
@@ -922,33 +922,34 @@ async fn run_turn(turn, mut ctl, emitter):          // emitter: Arc<dyn EventEmi
 
 ### 5.9 配置
 
-`config.toml` 新增 `[llm]` 段；密钥只存在配置文件中，不进入数据库：
+`config.toml` 新增 `[llm]` 段；密钥只存在配置文件中，不进入数据库。
+`default_provider` 可省略，`providers` 默认空表，未配置时应用仍可启动：
 
 ```toml
 [llm]
-default_provider = "edgee"
+# default_provider = "edgee"
 max_steps = 8
 request_timeout_seconds = 120
 max_retries = 2
 allow_streaming = true
 
 # Edgee 网关（默认 https://edgee.io，注意 base_url 不含 /v1）
-[llm.providers.edgee]
-base_url = "https://edgee.io"
-api_key = "sk-..."
-model = "anthropic/claude-haiku-4-5"
+# [llm.providers.edgee]
+# base_url = "https://edgee.io"
+# api_key = "sk-..."
+# model = "anthropic/claude-haiku-4-5"
 # compression_model = "claude"   # 可选，仅 Edgee 网关有意义
 
 # 也可以直连任意 OpenAI 兼容端点
-[llm.providers.deepseek]
-base_url = "https://api.deepseek.com"
-api_key = "sk-..."
-model = "deepseek-chat"
+# [llm.providers.deepseek]
+# base_url = "https://api.deepseek.com"
+# api_key = "sk-..."
+# model = "deepseek-chat"
 ```
 
 - `ConfigHandle` 增加 `llm()` / `set_llm()`；`set_llm` 先经 `toml::to_string_pretty` 回写
   `config.toml`，成功后再更新内存，保证「重启后仍在」。
-- `config::init` 记录配置文件路径，供回写使用；文件不存在时首次写入会创建它。
+- `lib.rs` 加载配置后调用 `ConfigHandle::set_path` 记录配置文件路径，供回写使用；文件不存在时首次写入会创建它。
 - 密钥解析顺序：provider 配置 → `EDGEE_API_KEY` 环境变量；都没有则 `llm_unconfigured`。
 - `llm_get_config` 返回脱敏视图：`api_key_configured` 表示是否已配置，
   `api_key_masked` 仅保留前 3 位与后 4 位（如 `sk-***abcd`）；`llm_upsert_provider`

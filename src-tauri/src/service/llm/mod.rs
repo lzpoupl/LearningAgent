@@ -78,10 +78,14 @@ impl LlmClient {
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .map(String::from)
-            .unwrap_or_else(|| llm.default_provider.trim().to_string());
-        if provider.is_empty() {
-            return Err(ApiError::llm_unconfigured("未配置默认 provider"));
-        }
+            .or_else(|| {
+                llm.default_provider
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(String::from)
+            })
+            .ok_or_else(|| ApiError::llm_unconfigured("未配置默认 provider"))?;
 
         let provider_cfg = llm
             .providers
@@ -210,7 +214,7 @@ impl LlmClient {
             .collect();
 
         LlmConfigView {
-            default_provider: llm.default_provider,
+            default_provider: llm.default_provider.unwrap_or_default(),
             max_steps: llm.max_steps,
             allow_streaming: llm.allow_streaming,
             providers,
@@ -264,7 +268,7 @@ impl LlmClient {
         if !llm.providers.contains_key(name) {
             return Err(ApiError::not_found(format!("provider 不存在: {name}")));
         }
-        llm.default_provider = name.to_string();
+        llm.default_provider = Some(name.to_string());
         self.config.set_llm(llm)?;
         Ok(self.config_view())
     }
@@ -333,7 +337,7 @@ mod tests {
     fn client() -> LlmClient {
         let mut app = AppConfig::default();
         let mut llm = LlmConfig::default();
-        llm.default_provider = "edgee".to_string();
+        llm.default_provider = Some("edgee".to_string());
         llm.providers.insert(
             "edgee".to_string(),
             ProviderConfig {
@@ -379,8 +383,16 @@ mod tests {
     #[test]
     fn resolve_requires_api_key() {
         let mut app = AppConfig::default();
-        app.llm = LlmConfig::default();
-        app.llm.providers.get_mut("edgee").unwrap().api_key = String::new();
+        app.llm.default_provider = Some("edgee".to_string());
+        app.llm.providers.insert(
+            "edgee".to_string(),
+            ProviderConfig {
+                base_url: "https://edgee.io".to_string(),
+                api_key: String::new(),
+                model: "anthropic/claude-haiku-4-5".to_string(),
+                compression_model: None,
+            },
+        );
         let client = LlmClient::new(ConfigHandle::new(app), Arc::new(StubBackend));
 
         std::env::remove_var("EDGEE_API_KEY");

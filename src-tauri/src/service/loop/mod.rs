@@ -801,7 +801,7 @@ mod tests {
 
         let mut app = AppConfig::default();
         let mut llm_config = LlmConfig::default();
-        llm_config.default_provider = "edgee".to_string();
+        llm_config.default_provider = Some("edgee".to_string());
         llm_config.max_steps = max_steps;
         llm_config.providers.insert(
             "edgee".to_string(),

@@ -12,8 +12,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmConfig {
-    /// 未指定会话记录时使用的默认 provider 名。
-    pub default_provider: String,
+    /// 未指定会话记录时使用的默认 provider 名；未配置时为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_provider: Option<String>,
     /// 单轮循环的步数上限（含工具调用轮次）。
     pub max_steps: u32,
     /// 单次模型调用的超时时间（秒）。
@@ -22,20 +23,19 @@ pub struct LlmConfig {
     pub max_retries: u32,
     /// 是否允许在无工具的请求上启用流式输出。
     pub allow_streaming: bool,
-    /// provider 配置表，键为 provider 名。
-    #[serde(default = "default_providers")]
+    /// provider 配置表，键为 provider 名；默认空表，由设置页或配置文件新增。
     pub providers: HashMap<String, ProviderConfig>,
 }
 
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            default_provider: "edgee".to_string(),
+            default_provider: None,
             max_steps: 8,
             request_timeout_seconds: 120,
             max_retries: 2,
             allow_streaming: true,
-            providers: default_providers(),
+            providers: HashMap::new(),
         }
     }
 }
@@ -55,21 +55,6 @@ pub struct ProviderConfig {
     pub compression_model: Option<String>,
 }
 
-/// 内置的默认 provider：Edgee 网关，密钥留空待用户填写。
-pub fn default_providers() -> HashMap<String, ProviderConfig> {
-    let mut providers = HashMap::new();
-    providers.insert(
-        "edgee".to_string(),
-        ProviderConfig {
-            base_url: "https://edgee.io".to_string(),
-            api_key: String::new(),
-            model: "anthropic/claude-haiku-4-5".to_string(),
-            compression_model: None,
-        },
-    );
-    providers
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,17 +66,6 @@ mod tests {
             .unwrap()
             .try_deserialize()
             .unwrap()
-    }
-
-    #[test]
-    fn defaults_are_edgee_with_reasonable_limits() {
-        let llm = LlmConfig::default();
-        assert_eq!(llm.default_provider, "edgee");
-        assert_eq!(llm.max_steps, 8);
-        assert_eq!(llm.request_timeout_seconds, 120);
-        assert_eq!(llm.max_retries, 2);
-        assert!(llm.allow_streaming);
-        assert_eq!(llm.providers["edgee"].base_url, "https://edgee.io");
     }
 
     #[test]
@@ -108,7 +82,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(llm.default_provider, "deepseek");
+        assert_eq!(llm.default_provider.as_deref(), Some("deepseek"));
         assert_eq!(llm.max_steps, 4);
         assert_eq!(llm.allow_streaming, true);
         assert_eq!(llm.providers["deepseek"].model, "deepseek-chat");
@@ -116,8 +90,10 @@ mod tests {
     }
 
     #[test]
-    fn missing_providers_falls_back_to_seeded_edgee() {
+    fn missing_defaults_are_unset_and_empty() {
         let llm = from_toml("max_steps = 3\n");
-        assert!(llm.providers.contains_key("edgee"));
+        assert!(llm.default_provider.is_none());
+        assert!(llm.providers.is_empty());
+        assert_eq!(llm.max_steps, 3);
     }
 }

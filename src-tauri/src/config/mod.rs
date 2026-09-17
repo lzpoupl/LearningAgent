@@ -1,14 +1,14 @@
-//! 应用配置：从配置文件加载为全局读写状态，并通过依赖注入下发到各层。
+//! 应用配置：从配置文件加载为可共享的读写状态，并通过依赖注入下发到各层。
 //!
 //! 配置由 [`ConfigHandle`] 持有，内部使用 [`RwLock`] 保证并发访问串行：
-//! 多个读者可并行，写者独占。应用启动时调用 [`init`] 建立全局实例，随后
-//! 各层通过注入的句柄访问同一份配置。
+//! 多个读者可并行，写者独占。应用启动时在 `lib.rs` 构造句柄，随后各层通过
+//! 注入的句柄访问同一份配置。
 
 pub mod anki;
 pub mod llm;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -85,25 +85,6 @@ impl ConfigHandle {
     }
 }
 
-static GLOBAL: OnceLock<ConfigHandle> = OnceLock::new();
-
-/// 初始化全局配置并记录配置文件路径；重复调用保留首次建立的实例。
-/// 之后用 [`global`] 取句柄注入各层。
-pub fn init(config: AppConfig, path: PathBuf) {
-    GLOBAL.get_or_init(|| {
-        let handle = ConfigHandle::new(config);
-        handle.set_path(path);
-        handle
-    });
-}
-
-/// 获取全局配置句柄；需先调用 [`init`]。
-pub fn global() -> &'static ConfigHandle {
-    GLOBAL
-        .get()
-        .expect("全局配置尚未初始化，请先调用 config::init")
-}
-
 /// 从配置文件加载配置；文件不存在时使用内置默认值。
 pub fn load(path: &Path) -> Result<AppConfig, ::config::ConfigError> {
     let mut builder = ::config::Config::builder();
@@ -167,7 +148,7 @@ mod tests {
         handle.set_path(path.clone());
 
         let mut llm = handle.llm();
-        llm.default_provider = "deepseek".to_string();
+        llm.default_provider = Some("deepseek".to_string());
         llm.providers.insert(
             "deepseek".to_string(),
             ProviderConfig {
@@ -181,10 +162,10 @@ mod tests {
 
         assert!(path.exists());
         let reloaded = load(&path).unwrap();
-        assert_eq!(reloaded.llm.default_provider, "deepseek");
+        assert_eq!(reloaded.llm.default_provider.as_deref(), Some("deepseek"));
         assert_eq!(reloaded.llm.providers["deepseek"].api_key, "sk-test");
         // 内存中的配置同样更新。
-        assert_eq!(handle.llm().default_provider, "deepseek");
+        assert_eq!(handle.llm().default_provider.as_deref(), Some("deepseek"));
         // 未改动的 Anki 配置一并回写且保持一致。
         assert_eq!(reloaded.anki.scheduler.algorithm, "sm2");
     }

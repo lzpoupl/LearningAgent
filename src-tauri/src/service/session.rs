@@ -334,6 +334,7 @@ mod tests {
     fn config() -> ConfigHandle {
         let mut app = AppConfig::default();
         let mut llm = LlmConfig::default();
+        llm.default_provider = Some("edgee".to_string());
         llm.providers.insert(
             "edgee".to_string(),
             ProviderConfig {
@@ -519,7 +520,7 @@ mod tests {
 
         // 修改默认 provider 后，已有会话仍沿用记录。
         let mut llm = config.llm();
-        llm.default_provider = "deepseek".to_string();
+        llm.default_provider = Some("deepseek".to_string());
         config.set_llm(llm).unwrap();
 
         service

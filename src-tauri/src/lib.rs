@@ -45,11 +45,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // 读取配置文件并建立全局读写状态，随后取出全局句柄注入各层。
+            // 读取配置文件并建立读写状态，随后将句柄注入各层。
             let config_path = resolve_config_path();
             let app_config = config::load(&config_path)?;
-            config::init(app_config, config_path);
-            let config = config::global().clone();
+            let config = ConfigHandle::new(app_config);
+            config.set_path(config_path);
 
             // Vite 的开发模式对应 Tauri 的 debug 构建；前端使用 mock 时，后端
             // 也使用进程级内存数据库，确保测试数据不会污染正式数据。
@@ -105,7 +105,7 @@ pub fn run() {
 fn resolve_config_path() -> PathBuf {
     #[cfg(debug_assertions)]
     {
-        PathBuf::from("config.toml")
+        PathBuf::from("test/config.toml")
     }
     #[cfg(not(debug_assertions))]
     {
