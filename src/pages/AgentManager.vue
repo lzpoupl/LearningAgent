@@ -214,15 +214,17 @@ function editAgent(agent: AgentInfo) {
   void loadToolPermissions(agent.id)
 }
 
-/** 编辑时读取该 Agent 的逐项生效级别；新建时按「未配置等价于拒绝」填充工具目录。 */
+/** 编辑时读取该 Agent 的逐项生效级别；新建时按默认工具权限填充工具目录。 */
 async function loadToolPermissions(agentId: AgentType | null) {
   permissionsLoading.value = true
   permissionEntries.value = []
 
   try {
-    permissionEntries.value = agentId === null
-      ? (await listTools()).map(tool => ({ tool, permission: 'deny' as ToolPermission }))
-      : await getAgentToolPermissions(agentId)
+    if (agentId === null) {
+      permissionEntries.value = (await listTools()).map(tool => ({ tool, permission: tool.defaultPermission }))
+    } else {
+      permissionEntries.value = await getAgentToolPermissions(agentId)
+    }
   } catch (error) {
     console.error(error)
     ElMessage.error('工具权限加载失败，请重试。')
