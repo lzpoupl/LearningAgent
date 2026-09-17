@@ -173,17 +173,6 @@ export interface ToolCallResult {
   error?: ApiErrorShape
 }
 
-// ---------- 前端视图模型（由 content 文本渲染） ----------
-
-export type ContentType = 'text' | 'latex' | 'result'
-
-export interface ContentBlock {
-  type: ContentType
-  content?: string
-  title?: string
-  data?: Record<string, any>
-}
-
 // ---------- LLM provider 配置 ----------
 
 export interface LlmProviderView {

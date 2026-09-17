@@ -3,10 +3,7 @@
     <el-avatar :size="30" class="ai-avatar">AI</el-avatar>
 
     <div class="ai-content">
-      <template v-for="(block, index) in blocks" :key="`${index}-${block.type}`">
-        <AITextMessage v-if="block.type === 'text'" :content="block.content || ''" />
-        <LatexMessage v-else-if="block.type === 'latex'" :content="block.content || ''" />
-      </template>
+      <MarkdownMessage :content="content" />
 
       <span v-if="streaming" class="streaming-cursor" aria-hidden="true" />
 
@@ -21,12 +18,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Tools } from '@element-plus/icons-vue'
 
-import AITextMessage from './AITextMessage.vue'
-import LatexMessage from './LatexMessage.vue'
-import { toContentBlocks } from './content'
+import MarkdownMessage from './MarkdownMessage.vue'
 import type { ToolCall, ToolCallResult } from '../../types/chat'
 
 const props = defineProps<{
@@ -35,8 +29,6 @@ const props = defineProps<{
   toolCalls?: ToolCall[]
   toolResults?: Record<string, ToolCallResult>
 }>()
-
-const blocks = computed(() => toContentBlocks(props.content))
 
 function hasArguments(call: ToolCall): boolean {
   return Object.keys(call.arguments ?? {}).length > 0
