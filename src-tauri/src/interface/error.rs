@@ -44,6 +44,22 @@ impl ApiError {
         Self::new("tool_denied", message)
     }
 
+    pub fn tool_unavailable(message: impl Into<String>) -> Self {
+        Self::new("tool_unavailable", message)
+    }
+
+    pub fn llm_unconfigured(message: impl Into<String>) -> Self {
+        Self::new("llm_unconfigured", message)
+    }
+
+    pub fn llm_error(message: impl Into<String>) -> Self {
+        Self::new("llm_error", message)
+    }
+
+    pub fn turn_conflict(message: impl Into<String>) -> Self {
+        Self::new("turn_conflict", message)
+    }
+
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal", message)
     }

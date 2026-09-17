@@ -11,7 +11,9 @@
         @select-session="openSession"
         @rename-session="renameChatSession"
         @delete-session="deleteChatSession"
-        @send="sendMessage"
+        @send="sendChatMessage"
+        @cancel-turn="cancelChatTurn"
+        @approve-tool="approveChatTool"
         @open-agents="navigate('agents')"
         @open-assets="navigate('assets')"
         @open-anki="navigate('review')"
@@ -40,7 +42,7 @@ import AnkiStatistics from './pages/AnkiStatistics.vue'
 import Settings from './pages/Settings.vue'
 
 import { useChatSessions } from './composables/useChatSessions'
-import type { AgentType } from './types/chat'
+import type { AgentType, ApprovalDecision } from './types/chat'
 import type { Card } from './types/anki'
 import type { AppView } from './types/navigation'
 
@@ -65,13 +67,21 @@ const {
   sessions,
   currentSessionId,
   currentSession,
+  currentMessages,
   currentAgent,
   loading: chatLoading,
+  streamingMessageId,
+  pendingApproval,
+  toolResults,
+  turnError,
   startSession,
   sendMessage,
   selectSession,
   renameSession,
   deleteSession,
+  cancelTurn,
+  approveToolCall,
+  resetSession,
 } = useChatSessions()
 
 const currentComponent = computed(() => {
@@ -99,6 +109,11 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
       loading: chatLoading.value,
       initialAgent: pendingAgent.value,
       sessions: sessions.value,
+      messages: currentMessages.value,
+      streamingMessageId: streamingMessageId.value,
+      pendingApproval: pendingApproval.value,
+      toolResults: toolResults.value,
+      turnError: turnError.value,
     }
   }
 
@@ -120,8 +135,7 @@ function navigate(view: AppView) {
 
 // 回到新会话状态：不挂载任何会话，由左上的助手选择器决定下一步
 function clearActiveSession() {
-  currentSessionId.value = ''
-  currentAgent.value = 0
+  resetSession()
 }
 
 function openChatWith(agent: AgentType) {
@@ -137,7 +151,29 @@ async function startNewSession(agent: AgentType, question: string) {
   transientPage.value = null
   pendingAgent.value = undefined
   activeView.value = 'chat'
-  await startSession(agent, question)
+  try {
+    await startSession(agent, question)
+  } catch (error) {
+    console.error(error)
+    ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试。')
+  }
+}
+
+async function sendChatMessage(content: string) {
+  try {
+    await sendMessage(content)
+  } catch (error) {
+    console.error(error)
+    ElMessage.error(error instanceof Error ? error.message : '发送失败，请稍后重试。')
+  }
+}
+
+async function cancelChatTurn() {
+  await cancelTurn()
+}
+
+async function approveChatTool(decision: ApprovalDecision) {
+  await approveToolCall(decision)
 }
 
 function resetChatSession() {
@@ -145,7 +181,7 @@ function resetChatSession() {
   pendingAgent.value = undefined
 }
 
-async function openSession(sessionId: string) {
+async function openSession(sessionId: number) {
   transientPage.value = null
   editingCard.value = null
   newCardDeckPath.value = undefined
@@ -154,7 +190,7 @@ async function openSession(sessionId: string) {
   await selectSession(sessionId)
 }
 
-async function renameChatSession(sessionId: string, title: string) {
+async function renameChatSession(sessionId: number, title: string) {
   try {
     await renameSession(sessionId, title)
     ElMessage.success('会话已重命名')
@@ -164,7 +200,7 @@ async function renameChatSession(sessionId: string, title: string) {
   }
 }
 
-async function deleteChatSession(sessionId: string) {
+async function deleteChatSession(sessionId: number) {
   try {
     await deleteSession(sessionId)
     ElMessage.success('会话已删除')

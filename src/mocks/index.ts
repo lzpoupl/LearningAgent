@@ -3,10 +3,18 @@ import { AnkiMock } from './anki'
 import { AgentMock } from './agents'
 import { AssetMock } from './assets'
 import { ChatMock } from './chat'
+import { LlmMock } from './llm'
 import { SettingsMock } from './settings'
 import { StatisticsMock } from './statistics'
 import { StudyMock } from './study'
 import { UserMock } from './user'
+
+const TURN_COMMANDS = [
+  'agent_start_session',
+  'agent_send_message',
+  'agent_cancel_turn',
+  'agent_approve_tool_call',
+]
 
 /** 启用前端 Mock：按领域拦截 Tauri invoke，用内存假数据响应服务请求。 */
 export function setupMocks(): void {
@@ -14,6 +22,7 @@ export function setupMocks(): void {
   const agents = new AgentMock()
   const assets = new AssetMock()
   const chat = new ChatMock()
+  const llm = new LlmMock()
   const settings = new SettingsMock()
   const study = new StudyMock()
   const statistics = new StatisticsMock(anki)
@@ -26,11 +35,14 @@ export function setupMocks(): void {
         : {}
 
     if (cmd.startsWith('anki_')) return anki.handle(cmd, args)
+    if (TURN_COMMANDS.includes(cmd)) return chat.handle(cmd, args)
+    if (cmd.startsWith('session_')) return chat.handle(cmd, args)
     if (cmd.startsWith('agent_')) return agents.handle(cmd, args)
     if (cmd === 'tool_list' || cmd === 'get_all_tool_groups') return agents.handle(cmd, args)
     if (cmd.startsWith('asset_')) return assets.handle(cmd, args)
     if (cmd.startsWith('bucket_')) return assets.handle(cmd, args)
     if (cmd.startsWith('chat_')) return chat.handle(cmd, args)
+    if (cmd.startsWith('llm_')) return llm.handle(cmd, args)
     if (cmd.startsWith('settings_')) return settings.handle(cmd, args)
     if (cmd.startsWith('study_')) return study.handle(cmd, args)
     if (cmd.startsWith('stats_')) return statistics.handle(cmd, args)

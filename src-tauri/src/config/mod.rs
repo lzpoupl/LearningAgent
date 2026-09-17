@@ -5,13 +5,17 @@
 //! 各层通过注入的句柄访问同一份配置。
 
 pub mod anki;
+pub mod llm;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
+use crate::interface::error::ApiError;
+
 pub use anki::{AnkiConfig, SchedulerConfig};
+pub use llm::{LlmConfig, ProviderConfig};
 
 /// 应用配置聚合根，对应 config.toml。
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -19,18 +23,23 @@ pub use anki::{AnkiConfig, SchedulerConfig};
 pub struct AppConfig {
     /// Anki 模块配置。
     pub anki: AnkiConfig,
+    /// 大语言模型接入配置。
+    pub llm: LlmConfig,
 }
 
-/// 配置句柄：克隆后共享同一份配置与同一把读写锁，可注入到任意层级。
+/// 配置句柄：克隆后共享同一份配置、同一把读写锁与同一个配置文件路径。
 #[derive(Clone)]
 pub struct ConfigHandle {
     inner: Arc<RwLock<AppConfig>>,
+    /// 配置文件路径；为 `None` 时只更新内存（测试场景）。
+    path: Arc<RwLock<Option<PathBuf>>>,
 }
 
 impl ConfigHandle {
     pub fn new(config: AppConfig) -> Self {
         Self {
             inner: Arc::new(RwLock::new(config)),
+            path: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -43,13 +52,49 @@ impl ConfigHandle {
     pub fn set_scheduler(&self, scheduler: SchedulerConfig) {
         self.inner.write().expect("配置读写锁已中毒").anki.scheduler = scheduler;
     }
+
+    /// 读取 LLM 配置快照。
+    pub fn llm(&self) -> LlmConfig {
+        self.inner.read().expect("配置读写锁已中毒").llm.clone()
+    }
+
+    /// 更新 LLM 配置：先回写 `config.toml`，成功后再更新内存，保证重启后仍在。
+    pub fn set_llm(&self, llm: LlmConfig) -> Result<(), ApiError> {
+        let candidate = {
+            let guard = self.inner.read().expect("配置读写锁已中毒");
+            let mut candidate = guard.clone();
+            candidate.llm = llm.clone();
+            candidate
+        };
+
+        let path = self.path.read().expect("配置读写锁已中毒").clone();
+        if let Some(path) = path {
+            let text = toml::to_string_pretty(&candidate)
+                .map_err(|e| ApiError::internal(format!("配置序列化失败: {e}")))?;
+            std::fs::write(&path, text)
+                .map_err(|e| ApiError::internal(format!("配置文件写入失败: {e}")))?;
+        }
+
+        self.inner.write().expect("配置读写锁已中毒").llm = llm;
+        Ok(())
+    }
+
+    /// 记录配置文件路径，供 [`ConfigHandle::set_llm`] 回写使用。
+    pub fn set_path(&self, path: PathBuf) {
+        *self.path.write().expect("配置读写锁已中毒") = Some(path);
+    }
 }
 
 static GLOBAL: OnceLock<ConfigHandle> = OnceLock::new();
 
-/// 初始化全局配置；重复调用保留首次建立的实例。之后用 [`global`] 取句柄注入各层。
-pub fn init(config: AppConfig) {
-    GLOBAL.get_or_init(|| ConfigHandle::new(config));
+/// 初始化全局配置并记录配置文件路径；重复调用保留首次建立的实例。
+/// 之后用 [`global`] 取句柄注入各层。
+pub fn init(config: AppConfig, path: PathBuf) {
+    GLOBAL.get_or_init(|| {
+        let handle = ConfigHandle::new(config);
+        handle.set_path(path);
+        handle
+    });
 }
 
 /// 获取全局配置句柄；需先调用 [`init`]。
@@ -111,6 +156,37 @@ mod tests {
     fn empty_source_falls_back_to_defaults() {
         let config = from_toml("");
         assert_eq!(config.anki.scheduler.algorithm, "sm2");
+    }
+
+    #[test]
+    fn set_llm_persists_and_reloads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let handle = ConfigHandle::new(AppConfig::default());
+        handle.set_path(path.clone());
+
+        let mut llm = handle.llm();
+        llm.default_provider = "deepseek".to_string();
+        llm.providers.insert(
+            "deepseek".to_string(),
+            ProviderConfig {
+                base_url: "https://api.deepseek.com".to_string(),
+                api_key: "sk-test".to_string(),
+                model: "deepseek-chat".to_string(),
+                compression_model: None,
+            },
+        );
+        handle.set_llm(llm).unwrap();
+
+        assert!(path.exists());
+        let reloaded = load(&path).unwrap();
+        assert_eq!(reloaded.llm.default_provider, "deepseek");
+        assert_eq!(reloaded.llm.providers["deepseek"].api_key, "sk-test");
+        // 内存中的配置同样更新。
+        assert_eq!(handle.llm().default_provider, "deepseek");
+        // 未改动的 Anki 配置一并回写且保持一致。
+        assert_eq!(reloaded.anki.scheduler.algorithm, "sm2");
     }
 
     #[test]

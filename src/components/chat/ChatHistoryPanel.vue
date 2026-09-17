@@ -17,7 +17,7 @@
         @click="emit('select-session', session.id)" @keydown.enter.prevent="emit('select-session', session.id)">
         <div class="session-main">
           <strong>{{ session.title }}</strong>
-          <span>{{ sessionTime(session.createdAt) }} · {{ session.messages.length }} 条消息</span>
+          <span>{{ sessionTime(session.lastMessageAt ?? session.updatedAt) }} · {{ session.messageCount }} 条消息</span>
         </div>
 
         <el-dropdown class="session-actions" trigger="click" @command="command => handleCommand(command, session)"
@@ -55,25 +55,25 @@ import { ElMessageBox } from 'element-plus'
 import { Delete, EditPen, MoreFilled } from '@element-plus/icons-vue'
 
 import AgentSelect from '../agent/AgentSelect.vue'
-import type { AgentInfo, AgentType, ChatSession } from '../../types/chat.ts'
+import type { AgentInfo, AgentType, SessionInfo } from '../../types/chat.ts'
 
 const props = defineProps<{
   agents: AgentInfo[]
-  sessions: ChatSession[]
-  currentSessionId: string
+  sessions: SessionInfo[]
+  currentSessionId: number
   defaultAgentId?: AgentType
 }>()
 
 const emit = defineEmits<{
-  'select-session': [sessionId: string]
-  'rename-session': [sessionId: string, title: string]
-  'delete-session': [sessionId: string]
+  'select-session': [sessionId: number]
+  'rename-session': [sessionId: number, title: string]
+  'delete-session': [sessionId: number]
 }>()
 
 const scopeAgent = ref<AgentType>(props.defaultAgentId || props.agents[0]?.id || 0)
 
 const historySessions = computed(() =>
-  props.sessions.filter(session => session.agent === scopeAgent.value)
+  props.sessions.filter(session => session.agentId === scopeAgent.value)
 )
 
 // 右栏只跟随当前打开的会话，左上手选助手不会带动它
@@ -108,7 +108,7 @@ function sessionTime(value: string): string {
   return isToday ? `今天 ${time}` : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
 }
 
-function handleCommand(command: string, session: ChatSession) {
+function handleCommand(command: string, session: SessionInfo) {
   if (command === 'rename') {
     void renameSession(session)
     return
@@ -119,7 +119,7 @@ function handleCommand(command: string, session: ChatSession) {
   }
 }
 
-async function renameSession(session: ChatSession) {
+async function renameSession(session: SessionInfo) {
   try {
     const result = await ElMessageBox.prompt('输入新的会话名称', '重命名会话', {
       confirmButtonText: '保存',
@@ -139,7 +139,7 @@ async function renameSession(session: ChatSession) {
   }
 }
 
-async function removeSession(session: ChatSession) {
+async function removeSession(session: SessionInfo) {
   try {
     await ElMessageBox.confirm(`删除后“${session.title}”的对话记录将不再显示。`, '删除会话', {
       confirmButtonText: '删除',

@@ -13,7 +13,10 @@ use crate::config::ConfigHandle;
 use crate::service::agent::AgentService;
 use crate::service::anki::AnkiService;
 use crate::service::asset::AssetService;
+use crate::service::llm::edgee::EdgeeBackend;
+use crate::service::llm::LlmClient;
 use crate::service::scheduler::SchedulerRegistry;
+use crate::service::session::SessionService;
 use crate::service::statistics::StatisticsService;
 use crate::service::tool::ToolRegistry;
 
@@ -27,6 +30,10 @@ pub struct AppState {
     pub asset: AssetService,
     /// 统计服务：Anki 卡片统计的只读查询。
     pub statistics: StatisticsService,
+    /// 会话服务：会话 CRUD 与 Agent 轮次编排。
+    pub session: SessionService,
+    /// 模型客户端：provider 解析、调用与探测。
+    pub llm: LlmClient,
     /// 工具实现注册表：本阶段为空，各 service 共享同一实例。
     pub tool_registry: Arc<ToolRegistry>,
     /// 全局配置句柄：与各层注入的句柄共享同一份配置。
@@ -39,8 +46,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // 读取配置文件并建立全局读写状态，随后取出全局句柄注入各层。
-            let app_config = config::load(&resolve_config_path())?;
-            config::init(app_config);
+            let config_path = resolve_config_path();
+            let app_config = config::load(&config_path)?;
+            config::init(app_config, config_path);
             let config = config::global().clone();
 
             // Vite 的开发模式对应 Tauri 的 debug 构建；前端使用 mock 时，后端
@@ -67,11 +75,21 @@ pub fn run() {
             let asset = AssetService::new(db.clone());
             let statistics = StatisticsService::new(db.clone());
 
+            let llm = LlmClient::new(config.clone(), Arc::new(EdgeeBackend::new(config.clone())));
+            let session = SessionService::new(
+                db.clone(),
+                tool_registry.clone(),
+                llm.clone(),
+                config.clone(),
+            );
+
             let _ = app.manage(AppState {
                 anki,
                 agent,
                 asset,
                 statistics,
+                session,
+                llm,
                 tool_registry,
                 config,
             });

@@ -1,6 +1,8 @@
 pub mod agent;
 pub mod anki;
 pub mod asset;
+pub mod llm;
+pub mod session;
 pub mod statistics;
 
 /// 汇总各模块的 Tauri 命令。
@@ -48,6 +50,18 @@ macro_rules! controller_handlers {
             crate::controller::asset::asset_get_url,
             crate::controller::asset::asset_delete,
             crate::controller::asset::asset_upload_image,
+            crate::controller::session::session_list,
+            crate::controller::session::session_get,
+            crate::controller::session::session_rename,
+            crate::controller::session::session_delete,
+            crate::controller::session::agent_start_session,
+            crate::controller::session::agent_send_message,
+            crate::controller::session::agent_cancel_turn,
+            crate::controller::session::agent_approve_tool_call,
+            crate::controller::llm::llm_get_config,
+            crate::controller::llm::llm_upsert_provider,
+            crate::controller::llm::llm_set_default_provider,
+            crate::controller::llm::llm_test_provider,
         ]
     };
 }

@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
+use rusqlite::Connection;
+
+use crate::config::ConfigHandle;
 use crate::interface::agent::split_tool_id;
 use crate::interface::error::ApiError;
 
@@ -31,9 +34,37 @@ impl fmt::Display for ToolKey {
     }
 }
 
+/// 工具执行上下文；同步、事务内调用，因此不跨 `.await` 持有。
+#[allow(dead_code)]
+pub struct ToolContext<'a> {
+    pub conn: &'a Connection,
+    pub agent_id: i64,
+    pub session_id: i64,
+    pub config: &'a ConfigHandle,
+}
+
+/// 工具执行结果；`content` 为回填给模型的 JSON 结果。
+#[derive(Clone, Debug)]
+pub struct ToolOutcome {
+    pub content: serde_json::Value,
+}
+
+impl ToolOutcome {
+    pub fn new(content: serde_json::Value) -> Self {
+        Self { content }
+    }
+}
+
 /// 工具执行契约。
 pub trait Tool: Send + Sync {
     fn key(&self) -> ToolKey;
+
+    /// 执行工具；返回 `Ok` 时结果回填给模型，返回 `Err` 时错误以工具结果形式回填。
+    fn execute(
+        &self,
+        ctx: &ToolContext<'_>,
+        arguments: serde_json::Value,
+    ) -> Result<ToolOutcome, ApiError>;
 }
 
 /// 工具实现注册表；本阶段为空。
@@ -56,6 +87,19 @@ impl ToolRegistry {
 
     pub fn get(&self, key: &ToolKey) -> Option<Arc<dyn Tool>> {
         self.tools.get(key).cloned()
+    }
+
+    /// 执行工具；目录中存在但未注册实现时返回 `tool_unavailable`。
+    pub fn execute(
+        &self,
+        key: &ToolKey,
+        ctx: &ToolContext<'_>,
+        arguments: serde_json::Value,
+    ) -> Result<ToolOutcome, ApiError> {
+        match self.tools.get(key) {
+            Some(tool) => tool.execute(ctx, arguments),
+            None => Err(ApiError::tool_unavailable(format!("工具尚未实现: {key}"))),
+        }
     }
 }
 
@@ -90,5 +134,27 @@ mod tests {
     fn empty_registry_has_no_tools() {
         let registry = ToolRegistry::new();
         assert!(registry.get(&ToolKey::parse("anki.add_card").unwrap()).is_none());
+    }
+
+    #[test]
+    fn execute_reports_unregistered_tools() {
+        let registry = ToolRegistry::new();
+        let conn = crate::repository::db::open_in_memory().unwrap();
+        let config = ConfigHandle::new(crate::config::AppConfig::default());
+        let ctx = ToolContext {
+            conn: &conn,
+            agent_id: 1,
+            session_id: 1,
+            config: &config,
+        };
+
+        let err = registry
+            .execute(
+                &ToolKey::parse("anki.add_card").unwrap(),
+                &ctx,
+                serde_json::json!({}),
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "tool_unavailable");
     }
 }

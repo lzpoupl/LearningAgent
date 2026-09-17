@@ -1,22 +1,24 @@
 <template>
-  <UserMessage v-if="message.role === 'user'" :content="getTextContent()" />
-  <AIMessage v-else :message="message" />
+  <UserMessage v-if="message.role === 'user'" :content="message.content" />
+  <ToolMessage v-else-if="message.role === 'tool'" :message="message" />
+  <AIMessage
+    v-else
+    :content="message.content"
+    :streaming="message.status === 'streaming'"
+    :tool-calls="message.toolCalls"
+    :tool-results="toolResults"
+  />
 </template>
 
 <script setup lang="ts">
-import type { ChatMessage as ChatMessageType } from '../../types/chat'
+import type { MessageInfo, ToolCallResult } from '../../types/chat'
 
 import AIMessage from './AIMessage.vue'
+import ToolMessage from './ToolMessage.vue'
 import UserMessage from './UserMessage.vue'
 
-const props = defineProps<{
-  message: ChatMessageType
+defineProps<{
+  message: MessageInfo
+  toolResults?: Record<string, ToolCallResult>
 }>()
-
-const getTextContent = () => {
-  return props.message.content
-    .filter(item => item.type === 'text')
-    .map(item => item.content || '')
-    .join('')
-}
 </script>

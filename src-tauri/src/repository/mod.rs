@@ -4,6 +4,7 @@ pub mod bucket;
 pub mod db;
 pub mod deck;
 pub mod fs;
+pub mod session;
 pub mod statistics;
 
 use rusqlite::Connection;

@@ -35,6 +35,18 @@ pub fn get_agent(conn: &Connection, agent_id: i64) -> Result<Option<AgentInfo>, 
     .map_err(ApiError::from)
 }
 
+/// 读取 Agent 的系统提示词；会话创建时固化为快照。
+pub fn get_system_prompt(conn: &Connection, agent_id: i64) -> Result<String, ApiError> {
+    conn.query_row(
+        "SELECT system_prompt FROM agent WHERE id = ?1",
+        [agent_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(ApiError::from)?
+    .ok_or_else(|| ApiError::not_found(format!("Agent 不存在: {agent_id}")))
+}
+
 /// 确认 Agent 存在，否则返回 `not_found`。
 pub fn ensure_agent(conn: &Connection, agent_id: i64) -> Result<(), ApiError> {
     if get_agent(conn, agent_id)?.is_none() {

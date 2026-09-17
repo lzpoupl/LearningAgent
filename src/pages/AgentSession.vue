@@ -2,7 +2,7 @@
   <main class="session-page">
     <section class="session-layout">
       <el-card class="conversation-card" shadow="never">
-        <template v-if="currentMessages.length" #header>
+        <template v-if="messages.length" #header>
           <div class="conversation-header">
             <div class="agent-heading">
               <AgentIcon v-if="currentAgentInfo" :color="currentAgentInfo.color" :icon="currentAgentInfo.icon"
@@ -10,21 +10,29 @@
               <el-avatar v-else class="empty-avatar" :size="38" />
               <div>
                 <strong>{{ currentAgentInfo?.name ?? currentAgent }}</strong>
-                <span><i />{{ agentError || '基于学习资产回答' }}</span>
+                <span><i />{{ agentError || modelLabel }}</span>
               </div>
             </div>
 
-            <el-button plain size="small" @click="emit('new-session')">
-              <el-icon>
-                <Plus />
-              </el-icon>
-              新会话
-            </el-button>
+            <div class="header-actions">
+              <el-button v-if="loading" plain size="small" @click="emit('cancel-turn')">
+                <el-icon>
+                  <VideoPause />
+                </el-icon>
+                停止
+              </el-button>
+              <el-button plain size="small" @click="emit('new-session')">
+                <el-icon>
+                  <Plus />
+                </el-icon>
+                新会话
+              </el-button>
+            </div>
           </div>
         </template>
 
         <div ref="messageContainer" class="message-list" aria-live="polite">
-          <div v-if="currentMessages.length === 0" class="new-session-intro">
+          <div v-if="messages.length === 0" class="new-session-intro">
             <div class="welcome-mark">✦</div>
             <span class="eyebrow">NEW LEARNING SESSION</span>
             <h1>开始新的学习</h1>
@@ -35,9 +43,10 @@
             <p v-if="agentsError" class="intro-error" role="alert">{{ agentsError }}</p>
           </div>
 
-          <ChatMessage v-for="message in currentMessages" :key="message.id" :message="message" />
+          <ChatMessage v-for="message in messages" :key="message.id" :message="message"
+            :tool-results="toolResults" />
 
-          <div v-if="loading" class="loading-state">
+          <div v-if="showWaiting" class="loading-state">
             <el-icon class="is-loading">
               <Loading />
             </el-icon>
@@ -46,6 +55,8 @@
         </div>
 
         <template #footer>
+          <el-alert v-if="turnError" class="turn-error" :closable="false" :title="turnError" show-icon type="error" />
+
           <form class="composer" @submit.prevent="send">
             <el-input v-model="inputMessage" :disabled="loading" :rows="2" maxlength="4000"
               placeholder="输入你的问题..." resize="none" show-word-limit type="textarea"
@@ -69,36 +80,62 @@
         @rename-session="(sessionId, title) => emit('rename-session', sessionId, title)"
         @select-session="emit('select-session', $event)" />
     </section>
+
+    <el-dialog :model-value="pendingApproval !== null" :close-on-click-modal="false" :close-on-press-escape="false"
+      :show-close="false" title="需要确认的工具调用" width="460px">
+      <p class="approval-tool">{{ pendingApproval?.toolId }}</p>
+      <pre class="approval-args">{{ formatArguments() }}</pre>
+      <template #footer>
+        <el-button @click="emit('approve-tool', 'deny')">拒绝</el-button>
+        <el-button @click="emit('approve-tool', 'allow_once')">仅本次允许</el-button>
+        <el-button type="primary" @click="emit('approve-tool', 'allow_always')">始终允许</el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { Loading, Plus, Promotion } from '@element-plus/icons-vue'
+import { Loading, Plus, Promotion, VideoPause } from '@element-plus/icons-vue'
 
 import AgentIcon from '../components/agent/AgentIcon.vue'
 import AgentSelect from '../components/agent/AgentSelect.vue'
 import ChatHistoryPanel from '../components/chat/ChatHistoryPanel.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 import { getAgent, listAgents } from '../services/agent'
-import type { AgentInfo, AgentType, ChatSession } from '../types/chat'
+import type {
+  AgentInfo,
+  AgentType,
+  ApprovalDecision,
+  MessageInfo,
+  PendingApproval,
+  SessionInfo,
+  ToolCallResult,
+} from '../types/chat'
 
 const props = defineProps<{
   currentAgent: AgentType
-  currentSession: ChatSession | null
+  currentSession: SessionInfo | null
+  currentSessionId: number
   loading: boolean
   initialAgent?: AgentType
-  sessions: ChatSession[]
-  currentSessionId: string
+  sessions: SessionInfo[]
+  messages: MessageInfo[]
+  streamingMessageId: number | null
+  pendingApproval: PendingApproval | null
+  toolResults: Record<string, ToolCallResult>
+  turnError: string
 }>()
 
 const emit = defineEmits<{
   'new-session': []
   send: [content: string]
   start: [agent: AgentType, content: string]
-  'select-session': [sessionId: string]
-  'rename-session': [sessionId: string, title: string]
-  'delete-session': [sessionId: string]
+  'select-session': [sessionId: number]
+  'rename-session': [sessionId: number, title: string]
+  'delete-session': [sessionId: number]
+  'cancel-turn': []
+  'approve-tool': [decision: ApprovalDecision]
 }>()
 
 const agents = ref<AgentInfo[]>([])
@@ -108,13 +145,24 @@ const inputMessage = ref('')
 const messageContainer = ref<HTMLElement | null>(null)
 
 const currentAgentInfo = ref<AgentInfo | null>(null)
-const currentMessages = computed(() => props.currentSession?.messages ?? [])
 const activeAgent = computed(() => (props.currentSession ? props.currentAgent : selectedAgent.value))
 // 右栏只跟随当前打开的会话，左上手选助手不会带动它
-const conversationAgent = computed(() => props.currentSession?.agent ?? 0)
+const conversationAgent = computed(() => props.currentSession?.agentId ?? 0)
+const showWaiting = computed(() => props.loading && props.streamingMessageId === null)
+const modelLabel = computed(() =>
+  props.currentSession?.lastModel ? `模型：${props.currentSession.lastModel}` : '默认模型',
+)
 const agentError = ref('')
 
 let agentRequestId = 0
+
+function formatArguments(): string {
+  const args = props.pendingApproval?.arguments
+  if (!args || Object.keys(args).length === 0) {
+    return '（无参数）'
+  }
+  return JSON.stringify(args, null, 2)
+}
 
 async function loadAgents() {
   agentsError.value = ''
@@ -137,10 +185,10 @@ function adoptLastConversationAgent() {
   }
 
   const latestSession = [...props.sessions]
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .find(session => agents.value.some(agent => agent.id === session.agent))
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    .find(session => agents.value.some(agent => agent.id === session.agentId))
 
-  selectedAgent.value = latestSession?.agent ?? 0
+  selectedAgent.value = latestSession?.agentId ?? 0
 }
 
 async function loadAgent(agentId: AgentType) {
@@ -193,7 +241,7 @@ async function scrollToBottom() {
 }
 
 watch(
-  () => [props.currentSession?.id, currentMessages.value.length, props.loading],
+  () => [props.currentSession?.id, props.messages.length, props.loading],
   scrollToBottom,
 )
 
@@ -287,6 +335,12 @@ onMounted(loadAgents)
 .conversation-header {
   justify-content: space-between;
   gap: 12px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .agent-heading {
@@ -396,6 +450,10 @@ onMounted(loadAgents)
   font-size: 12px;
 }
 
+.turn-error {
+  margin-bottom: 10px;
+}
+
 .composer {
   align-items: flex-end;
   gap: 10px;
@@ -428,6 +486,25 @@ onMounted(loadAgents)
   color: var(--learning-text-muted);
   font-size: 10px;
   text-align: center;
+}
+
+.approval-tool {
+  margin: 0 0 8px;
+  color: var(--learning-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.approval-args {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--learning-surface-muted);
+  color: var(--learning-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 @media (max-width: 1050px) {
