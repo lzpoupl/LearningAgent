@@ -57,11 +57,7 @@ pub fn run() {
             let conn = repository::db::open_in_memory()?;
 
             #[cfg(not(debug_assertions))]
-            let conn = {
-                let data_dir = app.path().app_data_dir()?;
-                std::fs::create_dir_all(&data_dir)?;
-                repository::db::open(data_dir.join("learningagent.db"))?
-            };
+            let conn = repository::db::open(PathBuf::from("LearningAgent.db"))?;
 
             // 调度算法注册表只建一次，Anki 服务与工具共享同一份实现。
             let schedulers = Arc::new(SchedulerRegistry::new());
@@ -121,9 +117,6 @@ fn resolve_config_path() -> PathBuf {
     }
     #[cfg(not(debug_assertions))]
     {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|dir| dir.join("config.toml")))
-            .unwrap_or_else(|| PathBuf::from("config.toml"))
+        PathBuf::from("./config.toml")
     }
 }

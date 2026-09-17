@@ -124,13 +124,39 @@ impl ConfigHandle {
     }
 }
 
-/// 从配置文件加载配置；文件不存在时使用内置默认值。
+/// 从配置文件加载配置。
+///
+/// 文件不存在时先写入默认配置（必要时创建父目录），保证首次启动即生成配置文件；
+/// 文件已存在时只读取，不覆盖用户内容；单个键缺失时回落到内置默认值。
 pub fn load(path: &Path) -> Result<AppConfig, ::config::ConfigError> {
-    let mut builder = ::config::Config::builder();
-    if path.exists() {
-        builder = builder.add_source(::config::File::from(path));
+    if !path.exists() {
+        write_default_config(path).map_err(|e| ::config::ConfigError::Foreign(Box::new(e)))?;
     }
-    builder.build()?.try_deserialize()
+
+    ::config::Config::builder()
+        .add_source(::config::File::from(path))
+        .build()?
+        .try_deserialize()
+}
+
+/// 生成默认配置文件内容：直接序列化 [`AppConfig::default`]，
+/// 使默认值与模板只在一处维护。
+fn default_config_toml() -> String {
+    let body = toml::to_string_pretty(&AppConfig::default()).expect("默认配置可以序列化为 TOML");
+    format!(
+        "# LearningAgent 配置文件。\n\
+         # 本文件缺失时启动会自动生成；某个键缺失时回落到内置默认值。\n\n{body}"
+    )
+}
+
+/// 写入默认配置，父目录不存在时一并创建。
+fn write_default_config(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    std::fs::write(path, default_config_toml())
 }
 
 #[cfg(test)]
@@ -176,6 +202,23 @@ mod tests {
     fn empty_source_falls_back_to_defaults() {
         let config = from_toml("");
         assert_eq!(config.anki.scheduler.algorithm, "sm2");
+    }
+
+    #[test]
+    fn missing_file_is_created_with_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("config.toml");
+
+        let config = load(&path).unwrap();
+
+        // 首次加载生成配置文件（含父目录），内容为内置默认值。
+        assert!(path.exists());
+        assert_eq!(config.anki.scheduler.algorithm, "sm2");
+        assert_eq!(config.llm.max_steps, 8);
+
+        // 生成的默认文件可被再次加载。
+        let reloaded = load(&path).unwrap();
+        assert_eq!(reloaded.anki.scheduler.learning_good_minutes, 10);
     }
 
     #[test]
