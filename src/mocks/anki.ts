@@ -11,9 +11,13 @@ import type {
   NewCard,
   ReviewOption,
   ReviewOutcome,
+  SchedulerConfig,
   UpdateCardContent,
 } from '../types/anki'
 import { seedCards, seedDecks, type MockDeck } from './data'
+
+/** Mock 已注册的调度算法，与后端 SchedulerRegistry 保持一致。 */
+const SCHEDULER_ALGORITHMS = ['sm2', 'fsrs']
 
 function normalizePath(path: string): string {
   const segments = path.split('/').filter(Boolean)
@@ -40,6 +44,12 @@ export class AnkiMock {
   private cards = new Map<string, Card>()
   private nextCardId = 100
   private reviewListener: ((cardId: string) => void) | null = null
+  private scheduler: SchedulerConfig = {
+    algorithm: 'sm2',
+    learning_again_minutes: 1,
+    learning_hard_minutes: 6,
+    learning_good_minutes: 10,
+  }
 
   constructor() {
     for (const deck of seedDecks) {
@@ -95,6 +105,10 @@ export class AnkiMock {
         return this.deleteCard(String(payload.cardId ?? ''))
       case 'anki_upload_image':
         return this.uploadImage((payload.input ?? {}) as Partial<UploadImageRequest>)
+      case 'anki_get_scheduler_config':
+        return this.getSchedulerConfig()
+      case 'anki_update_scheduler_config':
+        return this.updateSchedulerConfig(payload.scheduler as SchedulerConfig)
       default:
         return undefined
     }
@@ -320,6 +334,20 @@ export class AnkiMock {
       name,
       url: `data:${mimeType};base64,${contentBase64}`,
     }
+  }
+
+  // ---- 配置 ----
+
+  private getSchedulerConfig(): SchedulerConfig {
+    return { ...this.scheduler }
+  }
+
+  private updateSchedulerConfig(input: SchedulerConfig): SchedulerConfig {
+    if (!SCHEDULER_ALGORITHMS.includes(input.algorithm)) {
+      throw new Error(`未注册的调度算法: ${input.algorithm}`)
+    }
+    this.scheduler = { ...input }
+    return { ...this.scheduler }
   }
 
   // ---- 辅助 ----

@@ -10,6 +10,7 @@ import type {
   NewCard,
   ReviewOption,
   ReviewOutcome,
+  SchedulerConfig,
   UpdateCardContent,
 } from '../types/anki'
 
@@ -89,4 +90,14 @@ export function deleteCard(cardId: string): Promise<void> {
 
 export function uploadImage(input: UploadImageRequest): Promise<UploadedImage> {
   return invoke<UploadedImage>('anki_upload_image', { input })
+}
+
+/** 读取复习调度配置。 */
+export function getSchedulerConfig(): Promise<SchedulerConfig> {
+  return invoke<SchedulerConfig>('anki_get_scheduler_config')
+}
+
+/** 更新复习调度配置；算法名必须是后端已注册的算法。 */
+export function updateSchedulerConfig(scheduler: SchedulerConfig): Promise<SchedulerConfig> {
+  return invoke<SchedulerConfig>('anki_update_scheduler_config', { scheduler })
 }

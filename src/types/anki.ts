@@ -64,3 +64,16 @@ export interface AnkiError {
   code: string
   message: string
 }
+
+/**
+ * 复习调度配置，对应后端 config 包的 `SchedulerConfig`。
+ *
+ * 该结构未启用 camelCase 序列化，字段名与 `config.toml` 保持 snake_case，
+ * 因此这里直接沿用下划线命名，避免多一层映射。
+ */
+export interface SchedulerConfig {
+  algorithm: string
+  learning_again_minutes: number
+  learning_hard_minutes: number
+  learning_good_minutes: number
+}
