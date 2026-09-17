@@ -60,6 +60,10 @@ impl ApiError {
         Self::new("turn_conflict", message)
     }
 
+    pub fn user_declined(message: impl Into<String>) -> Self {
+        Self::new("user_declined", message)
+    }
+
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal", message)
     }

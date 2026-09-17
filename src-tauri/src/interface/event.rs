@@ -42,6 +42,15 @@ pub enum AgentEvent {
         tool_id: String,
         arguments: serde_json::Value,
     },
+    /// 工具需要用户补充输入，等待回答。
+    UserInputRequired {
+        session_id: i64,
+        turn_id: String,
+        call_id: String,
+        tool_id: String,
+        question: String,
+        options: Vec<String>,
+    },
     /// 工具执行结束。
     ToolResult {
         session_id: i64,
@@ -91,5 +100,27 @@ mod tests {
         assert_eq!(value["type"], "turn-ended");
         assert_eq!(value["status"], "step_limit");
         assert!(value["error"].is_null());
+    }
+
+    #[test]
+    fn user_input_required_serializes_question_and_options() {
+        let event = AgentEvent::UserInputRequired {
+            session_id: 7,
+            turn_id: "t-1".to_string(),
+            call_id: "call-1".to_string(),
+            tool_id: "user.ask_question".to_string(),
+            question: "你想学哪个？".to_string(),
+            options: vec!["导数".to_string(), "积分".to_string()],
+        };
+
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "user-input-required");
+        assert_eq!(value["sessionId"], 7);
+        assert_eq!(value["turnId"], "t-1");
+        assert_eq!(value["callId"], "call-1");
+        assert_eq!(value["toolId"], "user.ask_question");
+        assert_eq!(value["question"], "你想学哪个？");
+        assert_eq!(value["options"][0], "导数");
+        assert_eq!(value["options"][1], "积分");
     }
 }

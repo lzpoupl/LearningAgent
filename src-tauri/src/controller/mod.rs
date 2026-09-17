@@ -58,6 +58,8 @@ macro_rules! controller_handlers {
             crate::controller::session::agent_send_message,
             crate::controller::session::agent_cancel_turn,
             crate::controller::session::agent_approve_tool_call,
+            crate::controller::session::agent_answer_question,
+            crate::controller::session::agent_skip_question,
             crate::controller::llm::llm_get_config,
             crate::controller::llm::llm_upsert_provider,
             crate::controller::llm::llm_set_default_provider,

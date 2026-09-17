@@ -69,6 +69,7 @@ pub fn run() {
             // 注册工具实现，并在迁移已执行的前提下校验「实现 ⊆ 目录」，fail fast。
             let mut tool_registry = ToolRegistry::new();
             service::tool::anki::register(&mut tool_registry, schedulers.clone());
+            service::tool::user::register(&mut tool_registry);
             service::tool::validate_registry(&tool_registry, &conn)
                 .map_err(|e| format!("工具注册表校验失败: {}", e.message))?;
 

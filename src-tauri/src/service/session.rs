@@ -216,6 +216,29 @@ impl SessionService {
         self.turns.approve(session_id, turn_id, call_id, decision)
     }
 
+    pub fn answer_question(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+        call_id: &str,
+        answer: &str,
+    ) -> Result<(), ApiError> {
+        let answer = answer.trim();
+        if answer.is_empty() {
+            return Err(ApiError::invalid_input("回答不能为空"));
+        }
+        self.turns.answer(session_id, turn_id, call_id, answer)
+    }
+
+    pub fn skip_question(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+        call_id: &str,
+    ) -> Result<(), ApiError> {
+        self.turns.skip(session_id, turn_id, call_id)
+    }
+
     fn spawn_turn(
         &self,
         session_id: i64,
@@ -563,5 +586,46 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(error.code, "turn_conflict");
+    }
+
+    #[tokio::test]
+    async fn answer_and_skip_question_route_to_the_active_turn() {
+        let service = hanging_service(config());
+        let handle = service
+            .start_session(
+                StartSessionInput {
+                    agent_id: 1,
+                    content: "第一轮".to_string(),
+                },
+                RecordingEmitter::new().into_arc(),
+            )
+            .unwrap();
+
+        let error = service
+            .answer_question(handle.session_id, &handle.turn_id, "call-1", "   ")
+            .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+
+        service
+            .answer_question(handle.session_id, &handle.turn_id, "call-1", " 导数 ")
+            .unwrap();
+        service
+            .skip_question(handle.session_id, &handle.turn_id, "call-2")
+            .unwrap();
+
+        assert_eq!(
+            service
+                .answer_question(handle.session_id, "t-x", "call-1", "导数")
+                .unwrap_err()
+                .code,
+            "not_found"
+        );
+        assert_eq!(
+            service
+                .skip_question(999, &handle.turn_id, "call-1")
+                .unwrap_err()
+                .code,
+            "not_found"
+        );
     }
 }

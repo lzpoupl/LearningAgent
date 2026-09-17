@@ -14,6 +14,8 @@
         @send="sendChatMessage"
         @cancel-turn="cancelChatTurn"
         @approve-tool="approveChatTool"
+        @answer-question="answerChatQuestion"
+        @skip-question="skipChatQuestion"
         @open-agents="navigate('agents')"
         @open-assets="navigate('assets')"
         @open-anki="navigate('review')"
@@ -72,6 +74,7 @@ const {
   loading: chatLoading,
   streamingMessageId,
   pendingApproval,
+  pendingQuestion,
   toolResults,
   turnError,
   startSession,
@@ -81,6 +84,8 @@ const {
   deleteSession,
   cancelTurn,
   approveToolCall,
+  answerQuestion,
+  skipQuestion,
   resetSession,
 } = useChatSessions()
 
@@ -112,6 +117,7 @@ const currentComponentProps = computed<Record<string, unknown>>(() => {
       messages: currentMessages.value,
       streamingMessageId: streamingMessageId.value,
       pendingApproval: pendingApproval.value,
+      pendingQuestion: pendingQuestion.value,
       toolResults: toolResults.value,
       turnError: turnError.value,
     }
@@ -174,6 +180,14 @@ async function cancelChatTurn() {
 
 async function approveChatTool(decision: ApprovalDecision) {
   await approveToolCall(decision)
+}
+
+async function answerChatQuestion(answer: string) {
+  await answerQuestion(answer)
+}
+
+async function skipChatQuestion() {
+  await skipQuestion()
 }
 
 function resetChatSession() {

@@ -23,7 +23,7 @@ use crate::repository::{agent as agent_repo, session as session_repo};
 use crate::service::event::EventEmitter;
 use crate::service::llm::LlmClient;
 use crate::service::permission;
-use crate::service::tool::{ToolContext, ToolKey, ToolRegistry};
+use crate::service::tool::{ToolContext, ToolKey, ToolRegistry, UserPrompt};
 use crate::service::with_conn;
 
 use context::build_request;
@@ -534,7 +534,7 @@ async fn dispatch_tool(
             call.tool_id
         )))),
         ToolPermission::Allow => {
-            Dispatch::Run(execute_tool(deps, session_id, agent_id, call, &key))
+            run_or_prompt(deps, session_id, agent_id, turn_id, call, &key, ctl, emitter).await
         }
         ToolPermission::Ask => {
             emitter.emit(AgentEvent::ToolApprovalRequired {
@@ -546,25 +546,21 @@ async fn dispatch_tool(
             });
 
             let decision = loop {
-                if ctl.is_cancelled() {
-                    return Dispatch::Cancelled;
-                }
-                let (cancel, commands) = ctl.split();
-                tokio::select! {
-                    command = commands.recv() => match command {
-                        Some(TurnCommand::Approve { call_id, decision }) if call_id == call.id => {
-                            break decision;
-                        }
-                        Some(_) => continue,
-                        None => return Dispatch::Cancelled,
-                    },
-                    _ = cancel.changed() => return Dispatch::Cancelled,
+                let command = match ctl.await_command().await {
+                    Some(command) => command,
+                    None => return Dispatch::Cancelled,
+                };
+                match command {
+                    TurnCommand::Approve { call_id, decision } if call_id == call.id => {
+                        break decision;
+                    }
+                    _ => continue,
                 }
             };
 
             match decision {
                 ApprovalDecision::AllowOnce => {
-                    Dispatch::Run(execute_tool(deps, session_id, agent_id, call, &key))
+                    run_or_prompt(deps, session_id, agent_id, turn_id, call, &key, ctl, emitter).await
                 }
                 ApprovalDecision::AllowAlways => {
                     let updated = with_conn(&deps.db, |conn| {
@@ -579,7 +575,8 @@ async fn dispatch_tool(
                     });
                     match updated {
                         Ok(()) => {
-                            Dispatch::Run(execute_tool(deps, session_id, agent_id, call, &key))
+                            run_or_prompt(deps, session_id, agent_id, turn_id, call, &key, ctl, emitter)
+                                .await
                         }
                         Err(error) => Dispatch::Run(ToolRun::failure(error)),
                     }
@@ -588,6 +585,74 @@ async fn dispatch_tool(
                     format!("用户拒绝了工具调用 {}", call.tool_id),
                 ))),
             }
+        }
+    }
+}
+
+/// 权限通过后的分派：工具需要用户补充输入时暂停等待，否则直接执行。
+async fn run_or_prompt(
+    deps: &TurnDeps,
+    session_id: i64,
+    agent_id: i64,
+    turn_id: &str,
+    call: &crate::interface::session::ToolCall,
+    key: &ToolKey,
+    ctl: &mut TurnControlHandle,
+    emitter: &Arc<dyn EventEmitter>,
+) -> Dispatch {
+    let tool = match deps.tools.get(key) {
+        Some(tool) => tool,
+        None => {
+            return Dispatch::Run(ToolRun::failure(ApiError::tool_unavailable(format!(
+                "工具尚未实现: {key}"
+            ))))
+        }
+    };
+
+    match tool.user_prompt(&call.arguments) {
+        Ok(Some(prompt)) => ask_user(session_id, turn_id, call, prompt, ctl, emitter).await,
+        Ok(None) => Dispatch::Run(execute_tool(deps, session_id, agent_id, call, key)),
+        // 参数非法：立即回填失败结果，不进入等待。
+        Err(error) => Dispatch::Run(ToolRun::failure(error)),
+    }
+}
+
+/// 发出提问事件并等待用户作答；回答成功回填，跳过返回 `user_declined`。
+async fn ask_user(
+    session_id: i64,
+    turn_id: &str,
+    call: &crate::interface::session::ToolCall,
+    prompt: UserPrompt,
+    ctl: &mut TurnControlHandle,
+    emitter: &Arc<dyn EventEmitter>,
+) -> Dispatch {
+    emitter.emit(AgentEvent::UserInputRequired {
+        session_id,
+        turn_id: turn_id.to_string(),
+        call_id: call.id.clone(),
+        tool_id: call.tool_id.clone(),
+        question: prompt.question.clone(),
+        options: prompt.options.clone(),
+    });
+
+    loop {
+        let command = match ctl.await_command().await {
+            Some(command) => command,
+            None => return Dispatch::Cancelled,
+        };
+        match command {
+            TurnCommand::Answer { call_id, answer } if call_id == call.id => {
+                return Dispatch::Run(ToolRun::success(serde_json::json!({
+                    "question": prompt.question,
+                    "answer": answer,
+                })));
+            }
+            TurnCommand::Skip { call_id } if call_id == call.id => {
+                return Dispatch::Run(ToolRun::failure(ApiError::user_declined(
+                    "用户跳过了该提问，请基于现有信息继续或提出更具体的问题。",
+                )));
+            }
+            _ => continue,
         }
     }
 }
@@ -648,7 +713,7 @@ mod tests {
     use crate::service::event::RecordingEmitter;
     use crate::service::llm::{BoxFut, LlmBackend};
     use crate::service::scheduler::SchedulerRegistry;
-    use crate::service::tool::{anki, Tool, ToolOutcome};
+    use crate::service::tool::{anki, user, Tool, ToolOutcome};
 
     const TURN_ID: &str = "t-1";
 
@@ -922,6 +987,71 @@ mod tests {
             provider: "edgee".to_string(),
             model: "model-a".to_string(),
         }
+    }
+
+    /// 注册真实 user 工具的夹具；`user.ask_question` 默认权限为 allow。
+    fn user_fixture(responses: Vec<ChatResponse>) -> Fixture {
+        let conn = db::open_in_memory().unwrap();
+        let session = session_repo::insert_session(&conn, 1, "新会话").unwrap();
+        session_repo::append_message(
+            &conn,
+            session.id,
+            &session_repo::NewMessage::new(MessageRole::System, "你是助手"),
+        )
+        .unwrap();
+        session_repo::append_message(
+            &conn,
+            session.id,
+            &session_repo::NewMessage::new(MessageRole::User, "你好").with_turn_id(TURN_ID),
+        )
+        .unwrap();
+
+        let config = ConfigHandle::new(test_app_config());
+        let mut tools = ToolRegistry::new();
+        user::register(&mut tools);
+
+        Fixture {
+            deps: TurnDeps {
+                db: Arc::new(Mutex::new(conn)),
+                tools: Arc::new(tools),
+                llm: LlmClient::new(config.clone(), Arc::new(ScriptBackend::new(responses))),
+                config,
+            },
+            registry: Arc::new(TurnRegistry::new()),
+            emitter: Arc::new(RecordingEmitter::new()),
+            session_id: session.id,
+        }
+    }
+
+    /// 后台启动一轮，便于在等待期投递命令。
+    fn spawn_turn(fixture: &Fixture) -> tokio::task::JoinHandle<TurnOutcome> {
+        let control = fixture.registry.begin(fixture.session_id, TURN_ID).unwrap();
+        let emitter: Arc<dyn EventEmitter> = fixture.emitter.clone();
+        let deps = fixture.deps.clone();
+        let session_id = fixture.session_id;
+        tokio::spawn(async move {
+            run_turn(
+                deps,
+                session_id,
+                1,
+                TURN_ID.to_string(),
+                target(),
+                control,
+                emitter,
+            )
+            .await
+        })
+    }
+
+    async fn wait_for_user_prompt(fixture: &Fixture) {
+        let probe = fixture.emitter.clone();
+        wait_until(move || {
+            probe
+                .events()
+                .iter()
+                .any(|event| matches!(event, AgentEvent::UserInputRequired { .. }))
+        })
+        .await;
     }
 
     async fn run(fixture: &Fixture) -> TurnOutcome {
@@ -1275,5 +1405,137 @@ mod tests {
         })
         .unwrap();
         assert_eq!(cards, 1);
+    }
+
+    #[tokio::test]
+    async fn ask_question_pauses_until_answered() {
+        let fixture = user_fixture(vec![
+            tool_call_response(
+                "user.ask_question",
+                "call-1",
+                serde_json::json!({
+                    "question": "你想学哪个？",
+                    "options": ["导数", "积分"],
+                }),
+            ),
+            plain("最终回答"),
+        ]);
+
+        let handle = spawn_turn(&fixture);
+        wait_for_user_prompt(&fixture).await;
+
+        let prompt = fixture
+            .emitter
+            .events()
+            .into_iter()
+            .find_map(|event| match event {
+                AgentEvent::UserInputRequired {
+                    question, options, ..
+                } => Some((question, options)),
+                _ => None,
+            })
+            .expect("应有提问事件");
+        assert_eq!(prompt.0, "你想学哪个？");
+        assert_eq!(prompt.1, vec!["导数", "积分"]);
+
+        fixture
+            .registry
+            .answer(fixture.session_id, TURN_ID, "call-1", "积分")
+            .unwrap();
+
+        let outcome = handle.await.unwrap();
+        assert_eq!(outcome.status, TurnStatus::Completed);
+
+        let stored = messages(&fixture);
+        let tool_message = stored
+            .iter()
+            .find(|message| message.role == MessageRole::Tool)
+            .expect("应有工具结果消息");
+        assert!(tool_message.content.contains("\"ok\":true"));
+        assert!(tool_message.content.contains("积分"));
+        assert_eq!(stored.last().unwrap().content, "最终回答");
+    }
+
+    #[tokio::test]
+    async fn ask_question_can_be_skipped() {
+        let fixture = user_fixture(vec![
+            tool_call_response(
+                "user.ask_question",
+                "call-1",
+                serde_json::json!({ "question": "你想学哪个？" }),
+            ),
+            plain("好的，我换个方式。"),
+        ]);
+
+        let handle = spawn_turn(&fixture);
+        wait_for_user_prompt(&fixture).await;
+
+        fixture
+            .registry
+            .skip(fixture.session_id, TURN_ID, "call-1")
+            .unwrap();
+
+        let outcome = handle.await.unwrap();
+        assert_eq!(outcome.status, TurnStatus::Completed);
+
+        let error = fixture
+            .emitter
+            .events()
+            .into_iter()
+            .find_map(|event| match event {
+                AgentEvent::ToolResult { ok, error, .. } if !ok => error,
+                _ => None,
+            })
+            .expect("应有失败的工具结果");
+        assert_eq!(error.code, "user_declined");
+    }
+
+    #[tokio::test]
+    async fn ask_question_with_invalid_arguments_does_not_pause() {
+        let fixture = user_fixture(vec![
+            tool_call_response("user.ask_question", "call-1", serde_json::json!({})),
+            plain("好的"),
+        ]);
+
+        let outcome = run(&fixture).await;
+        assert_eq!(outcome.status, TurnStatus::Completed);
+        assert_eq!(
+            count_events(&fixture, |event| matches!(
+                event,
+                AgentEvent::UserInputRequired { .. }
+            )),
+            0
+        );
+
+        let error = fixture
+            .emitter
+            .events()
+            .into_iter()
+            .find_map(|event| match event {
+                AgentEvent::ToolResult { ok, error, .. } if !ok => error,
+                _ => None,
+            })
+            .expect("应有失败的工具结果");
+        assert_eq!(error.code, "invalid_input");
+    }
+
+    #[tokio::test]
+    async fn cancelling_while_waiting_for_answer_leaves_no_tool_message() {
+        let fixture = user_fixture(vec![tool_call_response(
+            "user.ask_question",
+            "call-1",
+            serde_json::json!({ "question": "你想学哪个？" }),
+        )]);
+
+        let handle = spawn_turn(&fixture);
+        wait_for_user_prompt(&fixture).await;
+
+        fixture.registry.cancel(fixture.session_id).unwrap();
+
+        let outcome = handle.await.unwrap();
+        assert_eq!(outcome.status, TurnStatus::Cancelled);
+        assert!(messages(&fixture)
+            .iter()
+            .all(|message| message.role != MessageRole::Tool));
     }
 }

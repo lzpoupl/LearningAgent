@@ -407,7 +407,11 @@ mod tests {
         assert_eq!(tools[0].group, "anki");
         assert_eq!(tools[0].id, "add_card");
         assert_eq!(tools[0].default_permission, ToolPermission::Ask);
-        assert_eq!(tools[0].parameters, serde_json::json!({}));
+        // 000005 起工具契约带有 JSON Schema，add_card 的必填字段为三项。
+        assert_eq!(
+            tools[0].parameters["required"],
+            serde_json::json!(["deckPath", "front", "back"])
+        );
 
         let groups = list_tool_groups(&conn).unwrap();
         assert_eq!(

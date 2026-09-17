@@ -56,3 +56,18 @@ export function approveToolCall(
 ): Promise<void> {
   return invoke<void>('agent_approve_tool_call', { sessionId, turnId, callId, decision })
 }
+
+/** 回答工具提问。 */
+export function answerQuestion(
+  sessionId: number,
+  turnId: string,
+  callId: string,
+  answer: string,
+): Promise<void> {
+  return invoke<void>('agent_answer_question', { sessionId, turnId, callId, answer })
+}
+
+/** 跳过工具提问。 */
+export function skipQuestion(sessionId: number, turnId: string, callId: string): Promise<void> {
+  return invoke<void>('agent_skip_question', { sessionId, turnId, callId })
+}

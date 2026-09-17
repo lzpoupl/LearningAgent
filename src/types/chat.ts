@@ -147,6 +147,15 @@ export type AgentEvent =
       arguments: Record<string, unknown>
     }
   | {
+      type: 'user-input-required'
+      sessionId: number
+      turnId: string
+      callId: string
+      toolId: string
+      question: string
+      options: string[]
+    }
+  | {
       type: 'tool-result'
       sessionId: number
       turnId: string
@@ -163,6 +172,15 @@ export interface PendingApproval {
   callId: string
   toolId: string
   arguments: Record<string, unknown>
+  turnId: string
+}
+
+/** 等待用户回答的工具提问。 */
+export interface PendingQuestion {
+  callId: string
+  toolId: string
+  question: string
+  options: string[]
   turnId: string
 }
 

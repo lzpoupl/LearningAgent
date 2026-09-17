@@ -82,3 +82,26 @@ pub fn agent_approve_tool_call(
         .session
         .approve_tool_call(session_id, &turn_id, &call_id, decision)
 }
+
+#[tauri::command]
+pub fn agent_answer_question(
+    state: tauri::State<'_, AppState>,
+    session_id: i64,
+    turn_id: String,
+    call_id: String,
+    answer: String,
+) -> Result<(), ApiError> {
+    state
+        .session
+        .answer_question(session_id, &turn_id, &call_id, &answer)
+}
+
+#[tauri::command]
+pub fn agent_skip_question(
+    state: tauri::State<'_, AppState>,
+    session_id: i64,
+    turn_id: String,
+    call_id: String,
+) -> Result<(), ApiError> {
+    state.session.skip_question(session_id, &turn_id, &call_id)
+}

@@ -79,6 +79,8 @@ export class ChatMock {
         return this.sendMessage(payload)
       case 'agent_cancel_turn':
       case 'agent_approve_tool_call':
+      case 'agent_answer_question':
+      case 'agent_skip_question':
         return undefined
       default:
         return undefined

@@ -91,6 +91,24 @@
         <el-button type="primary" @click="emit('approve-tool', 'allow_always')">始终允许</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog :model-value="pendingQuestion !== null" :close-on-click-modal="false"
+      :close-on-press-escape="false" :show-close="false" title="AI 想向你确认" width="460px">
+      <p class="question-text">{{ pendingQuestion?.question }}</p>
+      <div v-if="pendingQuestion?.options.length" class="question-options">
+        <el-button v-for="option in pendingQuestion.options" :key="option" class="question-option"
+          @click="answerWith(option)">
+          {{ option }}
+        </el-button>
+      </div>
+      <el-input v-model="questionAnswer" :rows="3" maxlength="2000" placeholder="输入你的回答..." resize="none"
+        type="textarea" />
+      <template #footer>
+        <el-button @click="emit('cancel-turn')">取消本轮</el-button>
+        <el-button @click="emit('skip-question')">跳过</el-button>
+        <el-button :disabled="!questionAnswer.trim()" type="primary" @click="submitAnswer">提交回答</el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
@@ -109,6 +127,7 @@ import type {
   ApprovalDecision,
   MessageInfo,
   PendingApproval,
+  PendingQuestion,
   SessionInfo,
   ToolCallResult,
 } from '../types/chat'
@@ -123,6 +142,7 @@ const props = defineProps<{
   messages: MessageInfo[]
   streamingMessageId: number | null
   pendingApproval: PendingApproval | null
+  pendingQuestion: PendingQuestion | null
   toolResults: Record<string, ToolCallResult>
   turnError: string
 }>()
@@ -136,12 +156,15 @@ const emit = defineEmits<{
   'delete-session': [sessionId: number]
   'cancel-turn': []
   'approve-tool': [decision: ApprovalDecision]
+  'answer-question': [answer: string]
+  'skip-question': []
 }>()
 
 const agents = ref<AgentInfo[]>([])
 const agentsError = ref('')
 const selectedAgent = ref<AgentType>(props.initialAgent || props.currentAgent)
 const inputMessage = ref('')
+const questionAnswer = ref('')
 const messageContainer = ref<HTMLElement | null>(null)
 
 const currentAgentInfo = ref<AgentInfo | null>(null)
@@ -162,6 +185,18 @@ function formatArguments(): string {
     return '（无参数）'
   }
   return JSON.stringify(args, null, 2)
+}
+
+function answerWith(option: string) {
+  const answer = option.trim()
+  if (!answer) {
+    return
+  }
+  emit('answer-question', answer)
+}
+
+function submitAnswer() {
+  answerWith(questionAnswer.value)
 }
 
 async function loadAgents() {
@@ -270,6 +305,13 @@ watch(
     if (!selectedAgent.value) {
       adoptLastConversationAgent()
     }
+  },
+)
+
+watch(
+  () => props.pendingQuestion?.callId,
+  () => {
+    questionAnswer.value = ''
   },
 )
 
@@ -505,6 +547,25 @@ onMounted(loadAgents)
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.question-text {
+  margin: 0 0 12px;
+  color: var(--learning-text);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-option {
+  margin-left: 0;
 }
 
 @media (max-width: 1050px) {

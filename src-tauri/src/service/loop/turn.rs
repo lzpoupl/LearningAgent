@@ -16,6 +16,10 @@ pub enum TurnCommand {
         call_id: String,
         decision: ApprovalDecision,
     },
+    /// 对工具提问的回答。
+    Answer { call_id: String, answer: String },
+    /// 跳过工具提问。
+    Skip { call_id: String },
 }
 
 struct TurnEntry {
@@ -49,6 +53,22 @@ impl TurnControlHandle {
     /// 等待取消信号；已取消时立即返回。
     pub async fn wait_cancel(&mut self) {
         let _ = self.cancel.changed().await;
+    }
+
+    /// 等待下一条外部命令；期间被取消或命令通道关闭时返回 `None`。
+    ///
+    /// 集中封装取消握手，供审批与提问两类等待共用，避免取消语义各自漂移。
+    pub async fn await_command(&mut self) -> Option<TurnCommand> {
+        loop {
+            if self.is_cancelled() {
+                return None;
+            }
+            let (cancel, commands) = self.split();
+            tokio::select! {
+                command = commands.recv() => return command,
+                _ = cancel.changed() => return None,
+            }
+        }
     }
 }
 
@@ -123,6 +143,56 @@ impl TurnRegistry {
         call_id: &str,
         decision: ApprovalDecision,
     ) -> Result<(), ApiError> {
+        self.send(
+            session_id,
+            turn_id,
+            call_id,
+            TurnCommand::Approve {
+                call_id: call_id.to_string(),
+                decision,
+            },
+        )
+    }
+
+    /// 提交对工具提问的回答；轮次或会话不存在时返回 `not_found`。
+    pub fn answer(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+        call_id: &str,
+        answer: &str,
+    ) -> Result<(), ApiError> {
+        self.send(
+            session_id,
+            turn_id,
+            call_id,
+            TurnCommand::Answer {
+                call_id: call_id.to_string(),
+                answer: answer.to_string(),
+            },
+        )
+    }
+
+    /// 跳过工具提问；轮次或会话不存在时返回 `not_found`。
+    pub fn skip(&self, session_id: i64, turn_id: &str, call_id: &str) -> Result<(), ApiError> {
+        self.send(
+            session_id,
+            turn_id,
+            call_id,
+            TurnCommand::Skip {
+                call_id: call_id.to_string(),
+            },
+        )
+    }
+
+    /// 向指定轮次投递命令；会话 / 轮次不匹配或通道已关闭时返回 `not_found`。
+    fn send(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+        call_id: &str,
+        command: TurnCommand,
+    ) -> Result<(), ApiError> {
         let active = self
             .active
             .lock()
@@ -136,10 +206,7 @@ impl TurnRegistry {
 
         entry
             .commands
-            .send(TurnCommand::Approve {
-                call_id: call_id.to_string(),
-                decision,
-            })
+            .send(command)
             .map_err(|_| ApiError::not_found(format!("工具调用已结束: {call_id}")))?;
         Ok(())
     }
@@ -190,6 +257,7 @@ mod tests {
                 assert_eq!(call_id, "call-1");
                 assert_eq!(decision, ApprovalDecision::AllowAlways);
             }
+            other => panic!("期望 Approve，实际: {other:?}"),
         }
 
         assert_eq!(
@@ -204,6 +272,37 @@ mod tests {
                 .approve(9, "t-1", "call-1", ApprovalDecision::Deny)
                 .unwrap_err()
                 .code,
+            "not_found"
+        );
+    }
+
+    #[tokio::test]
+    async fn answer_and_skip_reach_the_loop() {
+        let registry = TurnRegistry::new();
+        let mut handle = registry.begin(1, "t-1").unwrap();
+
+        registry.answer(1, "t-1", "call-1", "导数").unwrap();
+        let (_, commands) = handle.split();
+        match commands.recv().await.unwrap() {
+            TurnCommand::Answer { call_id, answer } => {
+                assert_eq!(call_id, "call-1");
+                assert_eq!(answer, "导数");
+            }
+            other => panic!("期望 Answer，实际: {other:?}"),
+        }
+
+        registry.skip(1, "t-1", "call-2").unwrap();
+        match commands.recv().await.unwrap() {
+            TurnCommand::Skip { call_id } => assert_eq!(call_id, "call-2"),
+            other => panic!("期望 Skip，实际: {other:?}"),
+        }
+
+        assert_eq!(
+            registry.answer(1, "t-x", "call-1", "x").unwrap_err().code,
+            "not_found"
+        );
+        assert_eq!(
+            registry.skip(9, "t-1", "call-1").unwrap_err().code,
             "not_found"
         );
     }

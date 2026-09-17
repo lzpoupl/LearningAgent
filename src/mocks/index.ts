@@ -14,6 +14,8 @@ const TURN_COMMANDS = [
   'agent_send_message',
   'agent_cancel_turn',
   'agent_approve_tool_call',
+  'agent_answer_question',
+  'agent_skip_question',
 ]
 
 /** 启用前端 Mock：按领域拦截 Tauri invoke，用内存假数据响应服务请求。 */

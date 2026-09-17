@@ -2,6 +2,7 @@ import { computed, onMounted, ref } from 'vue'
 import { Channel } from '@tauri-apps/api/core'
 
 import {
+  answerQuestion as requestAnswerQuestion,
   approveToolCall as requestApproveToolCall,
   cancelTurn as requestCancelTurn,
   deleteSession as requestDeleteSession,
@@ -9,6 +10,7 @@ import {
   listSessions,
   renameSession as requestRenameSession,
   sendMessage as requestSendMessage,
+  skipQuestion as requestSkipQuestion,
   startSession as requestStartSession,
 } from '../services/session'
 import type {
@@ -17,6 +19,7 @@ import type {
   ApprovalDecision,
   MessageInfo,
   PendingApproval,
+  PendingQuestion,
   SessionInfo,
   ToolCallResult,
 } from '../types/chat'
@@ -33,6 +36,7 @@ export function useChatSessions() {
   const loading = ref(false)
   const streamingMessageId = ref<number | null>(null)
   const pendingApproval = ref<PendingApproval | null>(null)
+  const pendingQuestion = ref<PendingQuestion | null>(null)
   const toolResults = ref<Record<string, ToolCallResult>>({})
   const turnError = ref('')
 
@@ -148,10 +152,20 @@ export function useChatSessions() {
           turnId: event.turnId,
         }
         break
+      case 'user-input-required':
+        pendingQuestion.value = {
+          callId: event.callId,
+          toolId: event.toolId,
+          question: event.question,
+          options: event.options,
+          turnId: event.turnId,
+        }
+        break
       case 'turn-ended':
         loading.value = false
         streamingMessageId.value = null
         pendingApproval.value = null
+        pendingQuestion.value = null
         currentTurnId = ''
         if (event.status === 'failed') {
           turnError.value = event.error?.message ?? '本轮请求失败，请稍后重试。'
@@ -179,6 +193,7 @@ export function useChatSessions() {
     toolResults.value = {}
     turnError.value = ''
     currentSessionId.value = 0
+    pendingQuestion.value = null
     currentAgent.value = agent
     loading.value = true
 
@@ -272,6 +287,35 @@ export function useChatSessions() {
     }
   }
 
+  async function answerQuestion(answer: string) {
+    const question = pendingQuestion.value
+    const normalized = answer.trim()
+    if (!question || !normalized) {
+      return
+    }
+    const sessionId = currentSessionId.value
+    pendingQuestion.value = null
+    try {
+      await requestAnswerQuestion(sessionId, question.turnId, question.callId, normalized)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function skipQuestion() {
+    const question = pendingQuestion.value
+    if (!question) {
+      return
+    }
+    const sessionId = currentSessionId.value
+    pendingQuestion.value = null
+    try {
+      await requestSkipQuestion(sessionId, question.turnId, question.callId)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   async function selectSession(sessionId: number) {
     const session = sessions.value.find(item => item.id === sessionId)
     if (!session) {
@@ -281,6 +325,7 @@ export function useChatSessions() {
     currentAgent.value = session.agentId
     toolResults.value = {}
     turnError.value = ''
+    pendingQuestion.value = null
     await refreshMessages(sessionId)
   }
 
@@ -324,6 +369,7 @@ export function useChatSessions() {
     currentMessages.value = []
     toolResults.value = {}
     pendingApproval.value = null
+    pendingQuestion.value = null
     turnError.value = ''
   }
 
@@ -351,6 +397,7 @@ export function useChatSessions() {
     loading,
     streamingMessageId,
     pendingApproval,
+    pendingQuestion,
     toolResults,
     turnError,
     startSession,
@@ -360,6 +407,8 @@ export function useChatSessions() {
     deleteSession,
     cancelTurn,
     approveToolCall,
+    answerQuestion,
+    skipQuestion,
     resetSession,
   }
 }
