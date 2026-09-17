@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import { createCard, updateCardContent, uploadImage } from '../services/anki'
 import type { Card, Deck } from '../types/anki'
@@ -106,6 +106,26 @@ const backImageInput = ref<HTMLInputElement | null>(null)
 
 const isEditing = computed(() => Boolean(props.editingCard))
 const canSave = computed(() => Boolean(selectedDeckPath.value && front.value.trim() && back.value.trim()))
+
+function syncTextareaHeight(element: HTMLTextAreaElement | null) {
+  if (!element) {
+    return
+  }
+
+  element.style.height = 'auto'
+  element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`
+}
+
+async function syncTextareaHeights() {
+  await nextTick()
+  syncTextareaHeight(frontTextarea.value)
+  syncTextareaHeight(backTextarea.value)
+}
+
+watch([front, back], () => {
+  void syncTextareaHeights()
+})
+
 function openImagePicker(field: 'front' | 'back') {
   const input = field === 'front' ? frontImageInput.value : backImageInput.value
   input?.click()
@@ -241,7 +261,10 @@ async function saveCard() {
   }
 }
 
-onMounted(loadDecks)
+onMounted(async () => {
+  await loadDecks()
+  await syncTextareaHeights()
+})
 </script>
 
 <style scoped>

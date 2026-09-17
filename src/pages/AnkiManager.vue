@@ -870,14 +870,16 @@ h2 {
   z-index: 30;
   inset: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
   padding: 20px;
   background: rgba(33, 30, 26, 0.35);
 }
 
 .modal {
   width: min(460px, 100%);
+  margin: auto;
   padding: 24px;
   border-radius: 8px;
   background: #fff;

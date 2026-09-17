@@ -97,9 +97,8 @@ defineEmits<{
 }
 
 .card-rendered-content {
-  max-height: 150px;
   margin-top: 10px;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 15px;
@@ -154,6 +153,7 @@ defineEmits<{
 
 .card-rendered-content :deep(.katex) {
   font-size: 0.95em;
+  white-space: nowrap;
 }
 
 /* preview（预览弹窗） */
@@ -171,6 +171,7 @@ defineEmits<{
 
 .rendered-card-content {
   margin-top: 12px;
+  overflow-wrap: anywhere;
   color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 17px;
@@ -191,6 +192,10 @@ defineEmits<{
   height: auto;
   margin: 10px auto;
   border-radius: 5px;
+}
+
+.rendered-card-content :deep(.katex) {
+  white-space: nowrap;
 }
 
 .rendered-card-content :deep(.katex-display) {
@@ -258,8 +263,7 @@ defineEmits<{
 /* review（复习页） */
 .review-card {
   width: min(620px, 76vw);
-  height: min(560px, calc(100vh - 190px));
-  min-height: 420px;
+  min-height: max(420px, min(560px, calc(100vh - 190px)));
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -288,9 +292,10 @@ defineEmits<{
 .review-content {
   width: 100%;
   margin-top: 18px;
+  overflow-wrap: anywhere;
   color: var(--learning-text);
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(18px, 2.6vw, 29px);
+  font-size: clamp(16px, 1.25vw, 24px);
   line-height: 1.55;
 }
 
@@ -308,14 +313,17 @@ defineEmits<{
   height: auto;
 }
 
+.review-content :deep(.katex) {
+  white-space: nowrap;
+}
+
 .review-content :deep(.katex-display) {
   overflow-x: auto;
   margin: 20px 0;
 }
 
 .card-half {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -357,10 +365,6 @@ defineEmits<{
   z-index: 1;
   padding: 5px 10px;
   background: var(--learning-surface);
-}
-
-.review-card.revealed .card-half {
-  min-height: 0;
 }
 
 .card-back.hidden .card-label,
