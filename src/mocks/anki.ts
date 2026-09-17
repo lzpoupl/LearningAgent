@@ -39,6 +39,7 @@ export class AnkiMock {
   private decks = new Map<string, MockDeck>()
   private cards = new Map<string, Card>()
   private nextCardId = 100
+  private reviewListener: ((cardId: string) => void) | null = null
 
   constructor() {
     for (const deck of seedDecks) {
@@ -47,6 +48,16 @@ export class AnkiMock {
     for (const card of seedCards) {
       this.cards.set(card.id, { ...card })
     }
+  }
+
+  /** 注册作答回调，供统计 Mock 累加今日复习数量。 */
+  setReviewListener(listener: (cardId: string) => void): void {
+    this.reviewListener = listener
+  }
+
+  /** 当前全部卡片的快照，统计 Mock 用它计算分布与今日进度。 */
+  snapshotCards(): Card[] {
+    return [...this.cards.values()].map((card) => ({ ...card }))
   }
 
   handle(cmd: string, payload: Record<string, unknown>): unknown {
@@ -269,6 +280,7 @@ export class AnkiMock {
     card.state = state
     card.dueAt = dueAt
     card.updatedAt = nowIso()
+    this.reviewListener?.(cardId)
     return { cardId, state, dueAt }
   }
 

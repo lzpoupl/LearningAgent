@@ -1,8 +1,4 @@
-import type {
-  StudyStatistics,
-  StudyTask,
-  TodayOverview,
-} from '../types/study'
+import type { StudyTask, TodayOverview } from '../types/study'
 
 const seedTasks: StudyTask[] = [
   {
@@ -35,56 +31,11 @@ const seedTasks: StudyTask[] = [
   },
 ]
 
-const seedStatistics: StudyStatistics = {
-  today: {
-    minutes: 155,
-    changePercent: 18,
-  },
-  week: {
-    minutes: 680,
-    targetMinutes: 960,
-    progressPercent: 71,
-  },
-  streakDays: 12,
-  masteredKnowledgePoints: 128,
-  masteredThisWeek: 9,
-  weeklyStudy: [
-    { day: '周三', minutes: 80, today: false },
-    { day: '周四', minutes: 95, today: false },
-    { day: '周五', minutes: 60, today: false },
-    { day: '周六', minutes: 120, today: false },
-    { day: '周日', minutes: 80, today: false },
-    { day: '周一', minutes: 90, today: false },
-    { day: '今天', minutes: 155, today: true },
-  ],
-  subjects: [
-    { id: 'math', name: '数学', icon: '∑', theme: 'math', minutes: 370, percentage: 54 },
-    { id: 'english', name: '英语', icon: 'A', theme: 'english', minutes: 215, percentage: 32 },
-    { id: 'anki', name: 'Anki 复习', icon: '✦', theme: 'anki', minutes: 95, percentage: 14 },
-  ],
-  insight: {
-    title: '保持这个节奏',
-    description: '你已经连续学习 5 天。平均每天投入 1 小时 37 分，距离本周目标还差 4 小时 40 分。',
-    progressPercent: 71,
-  },
-}
-
 function cloneTask(task: StudyTask): StudyTask {
   return { ...task }
 }
 
-function cloneStatistics(): StudyStatistics {
-  return {
-    ...seedStatistics,
-    today: { ...seedStatistics.today },
-    week: { ...seedStatistics.week },
-    weeklyStudy: seedStatistics.weeklyStudy.map(day => ({ ...day })),
-    subjects: seedStatistics.subjects.map(subject => ({ ...subject })),
-    insight: { ...seedStatistics.insight },
-  }
-}
-
-/** 内存版学习计划与统计后端。 */
+/** 内存版学习计划后端；卡片相关统计由 mocks/statistics.ts 提供。 */
 export class StudyMock {
   private tasks = seedTasks.map(cloneTask)
 
@@ -94,8 +45,6 @@ export class StudyMock {
         return this.getTodayOverview()
       case 'study_update_task':
         return this.updateTask(String(payload.taskId ?? ''), Boolean(payload.done))
-      case 'study_get_statistics':
-        return cloneStatistics()
       default:
         return undefined
     }
@@ -105,10 +54,8 @@ export class StudyMock {
     return {
       date: new Date().toISOString(),
       tasks: this.tasks.map(cloneTask),
-      studyMinutes: seedStatistics.today.minutes,
+      studyMinutes: 155,
       targetMinutes: 240,
-      dueCardCount: 2,
-      totalCardCount: 4,
     }
   }
 

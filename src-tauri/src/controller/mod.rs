@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod anki;
 pub mod asset;
+pub mod statistics;
 
 /// 汇总各模块的 Tauri 命令。
 #[macro_export]
@@ -23,6 +24,10 @@ macro_rules! controller_handlers {
             crate::controller::anki::anki_delete_card,
             crate::controller::anki::anki_get_scheduler_config,
             crate::controller::anki::anki_update_scheduler_config,
+            crate::controller::statistics::stats_get_today_progress,
+            crate::controller::statistics::stats_get_card_breakdown,
+            crate::controller::statistics::stats_get_review_history,
+            crate::controller::statistics::stats_get_added_cards,
             crate::controller::agent::agent_list,
             crate::controller::agent::agent_get,
             crate::controller::agent::agent_create,

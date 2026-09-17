@@ -65,7 +65,7 @@ const navigationItems: Array<{ id: AppView; label: string; icon: Component }> = 
   { id: 'anki', label: 'Anki 管理', icon: Collection },
   { id: 'review', label: 'Anki 复习', icon: Reading },
   { id: 'assets', label: '学习资料', icon: Document },
-  { id: 'stats', label: '学习统计', icon: DataAnalysis },
+  { id: 'stats', label: 'Anki 统计', icon: DataAnalysis },
   { id: 'settings', label: '设置', icon: Setting },
 ]
 

@@ -112,8 +112,10 @@ import { computed, onMounted, ref } from 'vue'
 
 import AgentGlyph from '../components/agent/AgentGlyph.vue'
 import { listAgents } from '../services/agent'
+import { getTodayProgress } from '../services/statistics'
 import { getTodayOverview, updateStudyTask } from '../services/study'
 import type { AgentInfo, AgentType } from '../types/chat'
+import type { TodayProgress } from '../types/statistics'
 import type { StudyTask, TodayOverview } from '../types/study'
 
 const emit = defineEmits<{
@@ -136,6 +138,7 @@ interface QuickAction {
 const agents = ref<AgentInfo[]>([])
 const tasks = ref<StudyTask[]>([])
 const overview = ref<TodayOverview | null>(null)
+const todayStats = ref<TodayProgress | null>(null)
 const statsLoading = ref(false)
 const statsError = ref('')
 const taskUpdating = ref('')
@@ -203,17 +206,15 @@ const doneTaskCount = computed(
   () => tasks.value.filter(task => task.done).length
 )
 
-const totalCardCount = computed(() => overview.value?.totalCardCount ?? 0)
-const dueTodayCount = computed(() => overview.value?.dueCardCount ?? 0)
+const totalCardCount = computed(() => todayStats.value?.totalCards ?? 0)
+const dueTodayCount = computed(() => todayStats.value?.pendingCards ?? 0)
 
+/** 环形图展示今日完成比例，中心显示今日待复习卡片数。 */
 const circleStyle = computed(() => {
-  const percent =
-    totalCardCount.value > 0
-      ? Math.min(
-          100,
-          Math.round((dueTodayCount.value / totalCardCount.value) * 100)
-        )
-      : 0
+  const percent = Math.min(
+    100,
+    Math.round(todayStats.value?.completionPercent ?? 0)
+  )
 
   return {
     background: `conic-gradient(var(--primary) 0 ${percent}%, var(--track) ${percent}% 100%)`
@@ -260,13 +261,15 @@ async function loadStats() {
   statsError.value = ''
 
   try {
-    const [loadedOverview, loadedAgents] = await Promise.all([
+    const [loadedOverview, loadedAgents, loadedStats] = await Promise.all([
       getTodayOverview(),
       listAgents(),
+      getTodayProgress(),
     ])
     overview.value = loadedOverview
     tasks.value = loadedOverview.tasks
     agents.value = loadedAgents
+    todayStats.value = loadedStats
   } catch (error) {
     console.error(error)
     statsError.value = '首页数据加载失败，请稍后重试。'

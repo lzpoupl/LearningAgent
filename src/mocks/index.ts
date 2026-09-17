@@ -4,6 +4,7 @@ import { AgentMock } from './agents'
 import { AssetMock } from './assets'
 import { ChatMock } from './chat'
 import { SettingsMock } from './settings'
+import { StatisticsMock } from './statistics'
 import { StudyMock } from './study'
 import { UserMock } from './user'
 
@@ -15,6 +16,7 @@ export function setupMocks(): void {
   const chat = new ChatMock()
   const settings = new SettingsMock()
   const study = new StudyMock()
+  const statistics = new StatisticsMock(anki)
   const user = new UserMock()
 
   mockIPC((cmd, payload) => {
@@ -31,6 +33,7 @@ export function setupMocks(): void {
     if (cmd.startsWith('chat_')) return chat.handle(cmd, args)
     if (cmd.startsWith('settings_')) return settings.handle(cmd, args)
     if (cmd.startsWith('study_')) return study.handle(cmd, args)
+    if (cmd.startsWith('stats_')) return statistics.handle(cmd, args)
     if (cmd.startsWith('user_')) return user.handle(cmd)
 
     console.warn(`[mock] 未处理的命令: ${cmd}`)

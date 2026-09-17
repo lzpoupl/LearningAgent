@@ -1,0 +1,60 @@
+Anki 卡片统计数据：回改执行记录
+对应设计文档：docs/anki_statistics_design.md
+
+## 一、回改结果（对照上一版 33 项清单）
+
+| # | 文件 | 最终状态 |
+| --- | --- | --- |
+| 1 | `src-tauri/migrations/000003.sql` | 只建 `review_log`（无 `interval_days` 列）与 `idx_review_log_date` / `idx_review_log_card`；`card` 表不新增列 |
+| 2 | `src-tauri/src/interface/anki.rs` | 已整体回退，`Card` / `CardQuery` / `ReviewOutcome` 与原版一致 |
+| 3 | `src-tauri/src/interface/statistics.rs` | `CardCategory` = `New` / `Learning` / `Review` / `Relearning`；`CardBreakdown` 去掉 `separate_suspended` |
+| 4-10 | `src-tauri/src/repository/anki.rs` | 取回原版后只加回 `today_local`、`ReviewLogEntry`、`insert_review_log`、`deck_id_of` 与对应测试；`interval_days` / `suspended` / `buried_on` 相关代码全部移除；迁移测试改为断言「`card` 无这三列 + `review_log` 与两个索引存在」 |
+| 11-12 | `src-tauri/src/repository/statistics.rs` | 重写：`CategoryCounts` 4 字段、`category_counts(conn)`、`today_counts(conn, now)`，删除 `inactive_category_counts`；测试改为四类计数 / 到期判断 / 按天聚合 / 空库 |
+| 13-14 | `src-tauri/src/service/scheduler/mod.rs`、`sm2.rs`、`fsrs.rs` | 已整体回退，`interval_days` 贯通移除 |
+| 15-18 | `src-tauri/src/service/anki.rs` | 取回原版后加回 `deck_id_of` 与 `insert_review_log`（与 `save_schedule` 同事务）及 `db_error`；删除 `set_card_suspended` / `set_card_buried` / `outcome_of`；新增「作答写入复习记录、reset 不写记录」用例 |
+| 19-20 | `src-tauri/src/service/statistics.rs` | 重写：删除 `MATURE_INTERVAL_DAYS` 与分类合并逻辑，`card_breakdown()` 输出 4 项（新卡 / 学习中 / 复习中 / 重新学习） |
+| 21 | `src-tauri/src/controller/statistics.rs` | `stats_get_card_breakdown` 无参数 |
+| 22-23 | `src-tauri/src/controller/anki.rs`、`mod.rs` | 两个暂停 / 搁置命令与其注册已删除 |
+| 24-25 | `src/types/anki.ts`、`src/services/anki.ts` | 已整体回退 |
+| 26-27 | `src/types/statistics.ts`、`src/services/statistics.ts` | `CardCategory` 收敛为 4 值、去掉 `separateSuspended`；`getCardBreakdown()` 无参 |
+| 28 | `src/mocks/anki.ts` | 取回原版后只加回 `setReviewListener` / `snapshotCards`，并在 `gradeCard` 中触发回调 |
+| 29 | `src/mocks/data.ts` | 已整体回退（含删除 6 号搁置示例卡） |
+| 30 | `src/mocks/statistics.ts` | 4 项标签、`breakdown()` 只按 `card.state` 归类、今日进度不再过滤暂停 / 搁置 |
+| 31 | `src/components/charts/statisticsColors.ts` | 4 项，全部取自蓝色主题（见第三节） |
+| 32 | `src/pages/AnkiStatistics.vue` | 删除「分开统计暂停 / 搁置的卡片」复选框与 `reloadBreakdown` |
+| 33 | `src/pages/AnkiManager.vue` | 已整体回退（徽标、暂停 / 搁置按钮、`includeInactive`、`.flag-badge` 全部移除） |
+
+## 二、本轮另外两项调整
+
+| 项 | 文件 | 内容 |
+| --- | --- | --- |
+| 页面无法上下滚动 | `src/pages/AnkiStatistics.vue` | `.stats-page` 补 `height: 100%` 与 `min-width: 0`。`el-main` 是 `overflow: hidden` 的块级容器，根元素必须带确定高度才能自身滚动，否则内容被裁掉 |
+| 配色改为蓝色主题 | `src/components/charts/statisticsColors.ts`、`src/pages/AnkiStatistics.vue` | 分类色换成蓝色冷色阶，不再使用绿 / 橙 / 红；今日环形图「待完成」段改为蓝灰 `#9db2cf` |
+
+## 三、最终配色
+
+| 分类 | 颜色 |
+| --- | --- |
+| 新卡 | `#1d4ed8` |
+| 学习中 | `#5b9cf8` |
+| 复习中 | `#287df5` |
+| 重新学习 | `#0f7fb8` |
+
+复习柱状图 `#287df5`，新增柱状图 `#5b9cf8`；今日环形图已完成段 `#287df5`、待完成段 `#9db2cf`。
+
+## 四、保持不变
+
+| 文件 / 部分 | 说明 |
+| --- | --- |
+| `src-tauri/src/lib.rs` | `AppState.statistics` 与构造接线 |
+| `interface/mod.rs`、`repository/mod.rs`、`service/mod.rs` | 模块声明 |
+| `controller/mod.rs` | `pub mod statistics;` 与 4 个 `stats_*` 命令注册 |
+| `components/charts/DonutChart.vue`、`BarChart.vue`；`types/statistics.ts`、`services/statistics.ts` 主干；`mocks/index.ts` 的 `stats_` 分发；`Sidebar.vue`、`App.vue`、`Home.vue`；`study` 侧旧统计契约清理 | 均按设计文档保留 |
+
+## 五、已完成的其他事项
+
+| 项 | 说明 |
+| --- | --- |
+| `docs/anki_statistics_design.md` | 已按后端既有 `CardState` 口径重写，并同步蓝色主题配色、滚动说明与 `deck_id_of` |
+| `src/pages/Statistics.vue` | 已删除 |
+| `interface/statistics.rs` | 8 处 `rename_all` 补上引号 |

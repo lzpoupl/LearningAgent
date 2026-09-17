@@ -14,6 +14,7 @@ use crate::service::agent::AgentService;
 use crate::service::anki::AnkiService;
 use crate::service::asset::AssetService;
 use crate::service::scheduler::SchedulerRegistry;
+use crate::service::statistics::StatisticsService;
 use crate::service::tool::ToolRegistry;
 
 /// 应用全局共享状态。
@@ -24,6 +25,8 @@ pub struct AppState {
     pub agent: AgentService,
     /// 资产服务：bucket 映射与非结构化资产读写。
     pub asset: AssetService,
+    /// 统计服务：Anki 卡片统计的只读查询。
+    pub statistics: StatisticsService,
     /// 工具实现注册表：本阶段为空，各 service 共享同一实例。
     pub tool_registry: Arc<ToolRegistry>,
     /// 全局配置句柄：与各层注入的句柄共享同一份配置。
@@ -62,11 +65,13 @@ pub fn run() {
             );
             let agent = AgentService::new(db.clone(), tool_registry.clone(), config.clone());
             let asset = AssetService::new(db.clone());
+            let statistics = StatisticsService::new(db.clone());
 
             let _ = app.manage(AppState {
                 anki,
                 agent,
                 asset,
+                statistics,
                 tool_registry,
                 config,
             });

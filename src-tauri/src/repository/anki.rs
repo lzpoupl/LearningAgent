@@ -1,9 +1,9 @@
 //! 卡片相关的数据访问与调度持久化。
 
-use chrono::Utc;
+use chrono::{Local, Utc};
 use rusqlite::{Connection, OptionalExtension};
 
-use crate::interface::anki::{AnkiError, Card, CardQuery, CardSearch, CardState};
+use crate::interface::anki::{AnkiError, Card, CardGrade, CardQuery, CardSearch, CardState};
 
 use super::deck;
 use super::map_rusqlite;
@@ -393,6 +393,72 @@ pub fn search_cards(
         .collect()
 }
 
+/// 本地时区日期（`YYYY-MM-DD`）：复习日志与统计统一使用它。
+pub fn today_local() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// 一次作答的复习日志。
+pub struct ReviewLogEntry {
+    pub card_id: i64,
+    pub deck_id: i64,
+    pub grade: CardGrade,
+    pub prev_state: CardState,
+    pub next_state: CardState,
+    /// 预留：作答耗时。
+    pub duration_ms: u32,
+    /// RFC3339（UTC），精确作答时间。
+    pub reviewed_at: String,
+    /// 本地日期 `YYYY-MM-DD`，按天聚合用。
+    pub review_date: String,
+}
+
+fn grade_to_str(grade: CardGrade) -> &'static str {
+    match grade {
+        CardGrade::Again => "again",
+        CardGrade::Hard => "hard",
+        CardGrade::Good => "good",
+        CardGrade::Easy => "easy",
+    }
+}
+
+/// 追加一条复习日志；只在作答流程中调用。
+pub fn insert_review_log(conn: &Connection, entry: &ReviewLogEntry) -> Result<(), AnkiError> {
+    conn.execute(
+        "INSERT INTO review_log
+            (card_id, deck_id, grade, prev_state, next_state, duration_ms,
+             reviewed_at, review_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![
+            entry.card_id,
+            entry.deck_id,
+            grade_to_str(entry.grade),
+            state_to_str(entry.prev_state),
+            state_to_str(entry.next_state),
+            entry.duration_ms,
+            entry.reviewed_at,
+            entry.review_date
+        ],
+    )
+    .map_err(map_rusqlite)?;
+    Ok(())
+}
+
+/// 读取卡片当前所属的牌组 id。
+pub fn deck_id_of(conn: &Connection, card_id: i64) -> Result<i64, AnkiError> {
+    conn.query_row(
+        "SELECT deck_id FROM card WHERE id = ?1",
+        [card_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(map_rusqlite)?
+    .ok_or_else(|| AnkiError {
+        code: "not_found".into(),
+        message: format!("卡片不存在: {card_id}"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,6 +493,28 @@ mod tests {
 
         assert!(names.iter().any(|name| name == "algorithm"));
         assert!(names.iter().any(|name| name == "scheduler_state"));
+        // 000003 只建复习历史表，card 不新增列。
+        assert!(!names.iter().any(|name| name == "suspended"));
+        assert!(!names.iter().any(|name| name == "interval_days"));
+
+        let log_columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(review_log)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect();
+        assert!(log_columns.iter().any(|name| name == "review_date"));
+        assert!(!log_columns.iter().any(|name| name == "interval_days"));
+
+        let indexes: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name IN ('idx_review_log_date', 'idx_review_log_card')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(indexes, 2);
     }
 
     #[test]
@@ -483,4 +571,51 @@ mod tests {
         assert_eq!(saved.state, CardState::Learning);
         assert_eq!(saved.scheduler_state.as_deref(), Some("not-json-yet"));
     }
+
+    #[test]
+    fn review_log_is_appended_and_cascades_with_card() {
+        let (conn, card_id) = setup_card();
+
+        insert_review_log(
+            &conn,
+            &ReviewLogEntry {
+                card_id,
+                deck_id: deck_id_of(&conn, card_id).unwrap(),
+                grade: CardGrade::Good,
+                prev_state: CardState::New,
+                next_state: CardState::Review,
+                duration_ms: 0,
+                reviewed_at: "2026-01-01T12:00:00+00:00".into(),
+                review_date: "2026-01-01".into(),
+            },
+        )
+        .unwrap();
+
+        let (grade, prev_state, next_state, review_date): (String, String, String, String) = conn
+            .query_row(
+                "SELECT grade, prev_state, next_state, review_date FROM review_log WHERE card_id = ?1",
+                [card_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(grade, "good");
+        assert_eq!(prev_state, "new");
+        assert_eq!(next_state, "review");
+        assert_eq!(review_date, "2026-01-01");
+
+        // 卡片删除后复习历史级联清理。
+        delete_card(&conn, card_id).unwrap();
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn today_local_is_a_calendar_day() {
+        let today = today_local();
+        assert_eq!(today.len(), 10, "YYYY-MM-DD");
+        assert_eq!(today.matches('-').count(), 2);
+    }
+
 }

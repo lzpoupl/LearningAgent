@@ -36,8 +36,8 @@ import AnkiManager from './pages/AnkiManager.vue'
 import AnkiReview from './pages/AnkiReview.vue'
 import AssetManager from './pages/AssetManager.vue'
 import Home from './pages/Home.vue'
+import AnkiStatistics from './pages/AnkiStatistics.vue'
 import Settings from './pages/Settings.vue'
-import Statistics from './pages/Statistics.vue'
 
 import { useChatSessions } from './composables/useChatSessions'
 import type { AgentType } from './types/chat'
@@ -51,7 +51,7 @@ const pageComponents: Record<AppView, Component> = {
   anki: AnkiManager,
   review: AnkiReview,
   assets: AssetManager,
-  stats: Statistics,
+  stats: AnkiStatistics,
   settings: Settings,
 }
 

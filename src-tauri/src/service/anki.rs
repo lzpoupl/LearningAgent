@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 
 use crate::config::{ConfigHandle, SchedulerConfig};
 use crate::interface::anki::{
@@ -125,11 +125,12 @@ impl AnkiService {
         card_repo::delete_card(&conn, id)
     }
 
-    /// 对卡片作答（重来/困难/良好/简单），计算并持久化下一次复习安排。
+    /// 对卡片作答（重来/困难/良好/简单），计算并持久化下一次复习安排，并追加一条复习历史。
     pub fn grade_card(&self, card_id: &str, grade: CardGrade) -> Result<ReviewOutcome, AnkiError> {
         let scheduler = self.config.anki().scheduler;
         let conn = self.conn()?;
         let id = Self::parse_id(card_id)?;
+        let deck_id = card_repo::deck_id_of(&conn, id)?;
         let record =
             card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
         let card_repo::ScheduleRecord {
@@ -145,13 +146,8 @@ impl AnkiService {
             algorithm_state: Self::parse_algorithm_state(scheduler_state, card_id)?,
         };
 
-        let decision = schedule(
-            algorithm_impl.as_ref(),
-            &scheduler,
-            memory,
-            grade,
-            Utc::now(),
-        )?;
+        let now = Utc::now();
+        let decision = schedule(algorithm_impl.as_ref(), &scheduler, memory, grade, now)?;
 
         let due_at = decision.due_at.to_rfc3339();
         let next = card_repo::ScheduleRecord {
@@ -165,7 +161,24 @@ impl AnkiService {
             )?),
             due_at: Some(due_at.clone()),
         };
-        card_repo::save_schedule(&conn, id, &next)?;
+
+        // 调度更新与复习历史置于同一事务，两者同成同败。
+        let tx = conn.unchecked_transaction().map_err(Self::db_error)?;
+        card_repo::save_schedule(&tx, id, &next)?;
+        card_repo::insert_review_log(
+            &tx,
+            &card_repo::ReviewLogEntry {
+                card_id: id,
+                deck_id,
+                grade,
+                prev_state: state,
+                next_state: decision.state,
+                duration_ms: 0,
+                reviewed_at: now.to_rfc3339(),
+                review_date: now.with_timezone(&Local).format("%Y-%m-%d").to_string(),
+            },
+        )?;
+        tx.commit().map_err(Self::db_error)?;
 
         Ok(ReviewOutcome {
             card_id: card_id.to_string(),
@@ -303,6 +316,13 @@ impl AnkiService {
                     })
             }
             _ => Ok(None),
+        }
+    }
+
+    fn db_error(e: rusqlite::Error) -> AnkiError {
+        AnkiError {
+            code: "db".into(),
+            message: e.to_string(),
         }
     }
 
@@ -575,4 +595,45 @@ mod tests {
             "invalid_algorithm"
         );
     }
+    fn review_log_count(db: &Arc<Mutex<rusqlite::Connection>>) -> i64 {
+        let conn = db.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn grade_card_appends_review_log_and_reset_keeps_history() {
+        let (service, db, card_id) = setup_service("sm2");
+
+        service.grade_card(&card_id, CardGrade::Good).unwrap();
+        assert_eq!(review_log_count(&db), 1);
+
+        {
+            let conn = db.lock().unwrap();
+            let (grade, prev_state, next_state): (String, String, String) = conn
+                .query_row(
+                    "SELECT grade, prev_state, next_state FROM review_log",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!(grade, "good");
+            assert_eq!(prev_state, "new");
+            assert_eq!(next_state, "review");
+        }
+
+        // 重置是管理动作，不写入复习历史；失败的作答同样不产生记录。
+        service.reset_card(&card_id).unwrap();
+        assert_eq!(review_log_count(&db), 1);
+        assert_eq!(
+            service.grade_card("not-an-id", CardGrade::Good).unwrap_err().code,
+            "invalid_id"
+        );
+        assert_eq!(
+            service.grade_card("999999", CardGrade::Good).unwrap_err().code,
+            "not_found"
+        );
+        assert_eq!(review_log_count(&db), 1);
+    }
+
 }
