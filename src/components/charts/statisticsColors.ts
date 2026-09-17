@@ -8,8 +8,14 @@ export const CATEGORY_COLORS: Record<CardCategory, string> = {
   relearning: '#0f7fb8',
 }
 
-/** 复习次数条形图的主色：主题主蓝。 */
-export const REVIEW_BAR_COLOR = '#287df5'
+/** 复习次数柱状图的渐变色（上浅下深）。 */
+export const REVIEW_BAR_GRADIENT: [string, string] = ['#5b9cf8', '#287df5']
 
-/** 新增卡片条形图的主色：比主蓝浅一档，与复习图区分。 */
-export const ADDED_BAR_COLOR = '#5b9cf8'
+/** 新增卡片柱状图的渐变色（上浅下深）。 */
+export const ADDED_BAR_GRADIENT: [string, string] = ['#8ab8fb', '#5b9cf8']
+
+/** 今日环形图：已完成段。 */
+export const TODAY_DONE_COLOR = '#287df5'
+
+/** 今日环形图：待完成段。 */
+export const TODAY_PENDING_COLOR = '#9db2cf'

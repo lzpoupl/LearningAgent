@@ -20,15 +20,17 @@
         </div>
 
         <div class="today-body">
-          <DonutChart
-            :segments="todaySegments"
-            :size="176"
-            :thickness="24"
-            aria-label="今日卡片完成比例"
-          >
-            <strong class="donut-value">{{ today?.pendingCards ?? 0 }}</strong>
-            <span class="donut-label">今日待复习卡片</span>
-          </DonutChart>
+          <div class="donut-wrap">
+            <EChart
+              :option="todayOption"
+              height="176px"
+              aria-label="今日卡片完成比例"
+            />
+            <div class="donut-center">
+              <strong class="donut-value">{{ today?.pendingCards ?? 0 }}</strong>
+              <span class="donut-label">今日待复习卡片</span>
+            </div>
+          </div>
 
           <div class="today-metrics">
             <div>
@@ -52,15 +54,17 @@
         </div>
 
         <div class="breakdown-body">
-          <DonutChart
-            :segments="breakdownSegments"
-            :size="176"
-            :thickness="24"
-            aria-label="卡片数量占比"
-          >
-            <strong class="donut-value">{{ breakdown?.total ?? 0 }}</strong>
-            <span class="donut-label">卡片总数</span>
-          </DonutChart>
+          <div class="donut-wrap">
+            <EChart
+              :option="breakdownOption"
+              height="176px"
+              aria-label="卡片数量占比"
+            />
+            <div class="donut-center">
+              <strong class="donut-value">{{ breakdown?.total ?? 0 }}</strong>
+              <span class="donut-label">卡片总数</span>
+            </div>
+          </div>
 
           <table class="legend">
             <tbody>
@@ -102,10 +106,9 @@
 
       <p class="panel-caption">已经回答的问题的数量。</p>
 
-      <BarChart
-        :days="reviewHistory?.days ?? []"
-        :color="REVIEW_BAR_COLOR"
-        unit=" 次复习"
+      <EChart
+        :option="reviewOption"
+        height="248px"
         aria-label="每日复习次数"
       />
 
@@ -143,10 +146,9 @@
 
       <p class="panel-caption">新增的卡片数量。</p>
 
-      <BarChart
-        :days="addedCards?.days ?? []"
-        :color="ADDED_BAR_COLOR"
-        unit=" 张卡片"
+      <EChart
+        :option="addedOption"
+        height="248px"
         aria-label="每日新增卡片数量"
       />
 
@@ -162,15 +164,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 
-import BarChart from '../components/charts/BarChart.vue'
-import DonutChart from '../components/charts/DonutChart.vue'
-import type { DonutSegment } from '../components/charts/chartTypes'
+import EChart from '../components/charts/EChart.vue'
 import {
-  ADDED_BAR_COLOR,
-  CATEGORY_COLORS,
-  REVIEW_BAR_COLOR,
-} from '../components/charts/statisticsColors'
+  addedBarOption,
+  cardBreakdownOption,
+  reviewBarOption,
+  todayDonutOption,
+} from '../components/charts/statisticsCharts'
+import { CATEGORY_COLORS } from '../components/charts/statisticsColors'
 import PageHeader from '../components/common/PageHeader.vue'
+import { useTheme } from '../composables/useTheme'
 import {
   getAddedCards,
   getCardBreakdown,
@@ -184,10 +187,6 @@ import type {
   TimeRange,
   TodayProgress,
 } from '../types/statistics'
-
-/** 今日环形图的两段配色，深浅色模式下都保持可读。 */
-const TODAY_DONE_COLOR = '#287df5'
-const TODAY_PENDING_COLOR = '#9db2cf'
 
 const RANGE_OPTIONS: Array<{ value: TimeRange; label: string }> = [
   { value: 'last_month', label: '1 个月' },
@@ -205,28 +204,17 @@ const addedRange = ref<TimeRange>('last_year')
 const loading = ref(false)
 const errorMessage = ref('')
 
-const todaySegments = computed<DonutSegment[]>(() => {
-  const progress = today.value
-  if (!progress) {
-    return []
-  }
+const { isDark } = useTheme()
 
-  return [
-    { key: 'reviewed', value: progress.reviewedCards, color: TODAY_DONE_COLOR },
-    { key: 'pending', value: progress.pendingCards, color: TODAY_PENDING_COLOR },
-  ]
-})
-
-const breakdownSegments = computed<DonutSegment[]>(
-  () =>
-    breakdown.value?.categories
-      .filter(item => item.count > 0)
-      .map(item => ({
-        key: item.category,
-        value: item.count,
-        color: CATEGORY_COLORS[item.category],
-      })) ?? [],
+const todayOption = computed(() => todayDonutOption(today.value, isDark.value))
+const breakdownOption = computed(() => cardBreakdownOption(breakdown.value, isDark.value))
+const reviewOption = computed(() =>
+  reviewBarOption(reviewHistory.value?.days ?? [], isDark.value),
 )
+const addedOption = computed(() =>
+  addedBarOption(addedCards.value?.days ?? [], isDark.value),
+)
+
 
 async function reloadAll() {
   loading.value = true
@@ -335,6 +323,26 @@ onMounted(reloadAll)
   justify-content: center;
   gap: 28px;
   margin-top: 18px;
+}
+
+.donut-wrap {
+  position: relative;
+  width: 176px;
+  height: 176px;
+  flex: none;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--learning-text);
+  text-align: center;
+  pointer-events: none;
 }
 
 .donut-value {

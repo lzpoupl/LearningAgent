@@ -40,7 +40,7 @@ Anki 卡片统计数据：回改执行记录
 | 复习中 | `#287df5` |
 | 重新学习 | `#0f7fb8` |
 
-复习柱状图 `#287df5`，新增柱状图 `#5b9cf8`；今日环形图已完成段 `#287df5`、待完成段 `#9db2cf`。
+复习柱状图用渐变 `#5b9cf8` → `#287df5`，新增柱状图用渐变 `#8ab8fb` → `#5b9cf8`；今日环形图已完成段 `#287df5`、待完成段 `#9db2cf`。
 
 ## 四、保持不变
 
@@ -49,7 +49,7 @@ Anki 卡片统计数据：回改执行记录
 | `src-tauri/src/lib.rs` | `AppState.statistics` 与构造接线 |
 | `interface/mod.rs`、`repository/mod.rs`、`service/mod.rs` | 模块声明 |
 | `controller/mod.rs` | `pub mod statistics;` 与 4 个 `stats_*` 命令注册 |
-| `components/charts/DonutChart.vue`、`BarChart.vue`；`types/statistics.ts`、`services/statistics.ts` 主干；`mocks/index.ts` 的 `stats_` 分发；`Sidebar.vue`、`App.vue`、`Home.vue`；`study` 侧旧统计契约清理 | 均按设计文档保留 |
+| `types/statistics.ts`、`services/statistics.ts` 主干；`mocks/index.ts` 的 `stats_` 分发；`Sidebar.vue`、`App.vue`、`Home.vue`；`study` 侧旧统计契约清理 | 均按设计文档保留 |
 
 ## 五、已完成的其他事项
 
@@ -58,3 +58,48 @@ Anki 卡片统计数据：回改执行记录
 | `docs/anki_statistics_design.md` | 已按后端既有 `CardState` 口径重写，并同步蓝色主题配色、滚动说明与 `deck_id_of` |
 | `src/pages/Statistics.vue` | 已删除 |
 | `interface/statistics.rs` | 8 处 `rename_all` 补上引号 |
+| `docs/anki_statistics_design.md` | 已同步 ECharts 方案：§2.6 第 5 条、§4 文件职责、§5.6 图表实现、§5.10 实施顺序、§5.6 配色表 |
+| `docs/修改.txt` | 新增第六节「图表改用 ECharts 重构」，并更新第三节配色 |
+
+## 六、图表改用 ECharts 重构
+
+页面上的环形图与柱状图由手写 SVG 改为 ECharts 6 渲染，按需注册组件以控制体积。
+
+| # | 文件 | 变更 |
+| --- | --- | --- |
+| 1 | `package.json`、`package-lock.json` | 新增依赖 `echarts@^6.1.0` |
+| 2 | `src/components/charts/echarts.ts`（新增） | 基于 `echarts/core` 只注册 `BarChart`、`PieChart`、`GridComponent`、`TooltipComponent`、`DataZoomComponent`、`CanvasRenderer`，导出 `echarts`、`EChartsInstance`、`EChartsOption` |
+| 3 | `src/components/charts/EChart.vue`（新增） | 通用渲染组件：props 为 `option` / `height` / `ariaLabel`；挂载时 `init` 并 `setOption(option, true)` 整体替换，`ResizeObserver` 跟随容器宽度，卸载时 `dispose` |
+| 4 | `src/components/charts/statisticsCharts.ts`（新增） | 四个 option 生成器：`todayDonutOption`、`cardBreakdownOption`、`reviewBarOption`、`addedBarOption`；内含深浅两套调色板与 tooltip、坐标轴、`dataZoom` 逻辑 |
+| 5 | `src/components/charts/statisticsColors.ts` | `REVIEW_BAR_COLOR` / `ADDED_BAR_COLOR` 两个单色常量换成 `REVIEW_BAR_GRADIENT` / `ADDED_BAR_GRADIENT` 渐变；新增 `TODAY_DONE_COLOR` / `TODAY_PENDING_COLOR`；`CATEGORY_COLORS` 四色不变 |
+| 6 | `src/pages/AnkiStatistics.vue` | 引入 `EChart` 与四个 option 生成器，删掉 `todaySegments` / `breakdownSegments` 两个 computed；两个环形图与两张柱状图改用 `<EChart>`；`.donut-value` / `.donut-label` 外层新增 `.donut-wrap`（176×176 定位容器）与 `.donut-center`（绝对定位居中）；`useTheme()` 的 `isDark` 驱动配色 |
+| 7 | `src/components/charts/DonutChart.vue`、`BarChart.vue`、`chartTypes.ts`（删除） | 手写 SVG 环形图与柱状图已被 ECharts 取代，`src/` 内无其他引用 |
+
+图表行为：
+
+- 环形图段间留 2px 描边间隙；数据全空时用一条 `silent` 隐藏系列显示底环，保证空库也有图形。
+- 柱状图圆角柱顶 + 纵向渐变，纵轴 `minInterval: 1`，tooltip 用 `axisPointer: shadow` 并回显真实日期。
+- 天数超过 60 天时才挂 `dataZoom`（滚轮缩放 + 底部滑块）。
+- 页面滚动修复保留：`.stats-page` 仍为 `height: 100%` + `overflow-y: auto`。
+
+## 七、环形图按比值修正
+
+现象：今日学习统计的环形图在小占比时不是按比例画出的弧。
+
+原因：`itemStyle.borderRadius: 6` 大于扇形弧长时，ECharts 会把扇形塌缩成圆点。ECharts SSR 实测（外半径 82.7px）：
+
+| 已完成 : 待复习 | 占比 | 修正前蓝色扇区外弧半径 | 修正后 |
+| --- | --- | --- | --- |
+| 0 : 5 | 0% | 不绘制 | 不绘制 |
+| 1 : 500 | 0.20% | 塌缩到 0.5px | 完整细弧 |
+| 1 : 100 | 0.99% | 塌缩到 2.5px | 完整细弧 |
+| 3 : 35 | 7.89% | 完整弧 | 完整弧 |
+| 5 : 0 | 100% | 整环 | 整环 |
+
+| 文件 | 修改 |
+| --- | --- |
+| `src/components/charts/statisticsCharts.ts` | 今日环形图去掉 `itemStyle` 的 `borderRadius` 与描边，两段严格按比例相接；卡片数量环形图去掉 `borderRadius`，描边由 2px 收敛到 1px；新增 `sectorSeparator()` 并写明不使用圆角的原因 |
+| `docs/anki_statistics_design.md` | §5.6 同步扇形绘制口径与「不使用 `borderRadius`」的说明 |
+
+口径不变：环形图两段仍是 `reviewedCards`（今日已作答的去重卡片数）与 `pendingCards`（未学习 + 已到期未作答），
+后端 `completion_percent` 与两者之比一致。

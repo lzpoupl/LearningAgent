@@ -211,10 +211,14 @@ service 负责三件 repository 不做的事：**按范围生成连续日期序�
    注册 `stats_` 前缀分发。
 3. `src/pages/Statistics.vue` 删除，新增 `src/pages/AnkiStatistics.vue`；`App.vue` 的 `stats` 视图指向新页面。
 4. `Sidebar.vue` 中 `stats` 的标签由「学习统计」改为「Anki 统计」，图标沿用 `DataAnalysis`。
-5. 新增两个图表组件，供统计页与首页复用：
-    - `src/components/charts/DonutChart.vue`：SVG 环形图（`stroke-dasharray` 分段 + 中心插槽）。
-    - `src/components/charts/BarChart.vue`：柱状图，横轴为距今天数、纵轴自适应刻度，柱数过多时容器内横向滚动。
-   不引入图表库，保持与 `Home.vue` 现有手写图形一致的风格与包体积。
+5. 新增 `src/components/charts/` 下的 ECharts 封装，供统计页复用（ECharts 6，按需引入）：
+    - `src/components/charts/echarts.ts`：只注册用到的 `BarChart`、`PieChart`、`GridComponent`、
+      `TooltipComponent`、`DataZoomComponent` 与 `CanvasRenderer`，控制打包体积。
+    - `src/components/charts/EChart.vue`：通用渲染组件，接收 `option` 配置对象，挂载时 `init`、
+      配置整体替换、以 `ResizeObserver` 跟随容器宽度、卸载时 `dispose`。
+    - `src/components/charts/statisticsCharts.ts`：四张图表的配置生成器，统一负责 tooltip、坐标轴与缩放。
+    - `src/components/charts/statisticsColors.ts`：蓝色主题配色常量。
+   深浅色通过 `useTheme()` 的 `isDark` 切换两套调色板，与页面主题变量保持同一口径。
 6. `Home.vue` 的「今日学习统计」环形图改用 `getTodayProgress()`，与统计页共用口径；`tasks` 部分保持
    `study_get_today_overview` 不变。
 7. `types/study.ts` 删除 `StudyStatistics`、`StudyDay`、`StudySubject`，`services/study.ts` 删除
@@ -334,7 +338,8 @@ CREATE INDEX idx_review_log_card ON review_log (card_id);
 | `src/types/statistics.ts`、`src/services/statistics.ts` | 前端统计契约 |
 | `src/mocks/statistics.ts` | 开发态统计假数据 |
 | `src/pages/AnkiStatistics.vue` | 统计页面 |
-| `src/components/charts/DonutChart.vue`、`BarChart.vue` | 环形图与柱状图 |
+| `src/components/charts/echarts.ts`、`EChart.vue` | ECharts 按需注册与通用渲染组件 |
+| `src/components/charts/statisticsCharts.ts`、`statisticsColors.ts` | 四张图表的配置生成器与蓝色主题配色 |
 | `src/components/layout/Sidebar.vue`、`src/App.vue`、`src/pages/Home.vue` | 导航与首页接入 |
 
 ---
@@ -391,10 +396,19 @@ FROM card
 
 - 页面进入时并行发起 `stats_get_today_progress`、`stats_get_card_breakdown`、
   `stats_get_review_history('last_year')`、`stats_get_added_cards('last_year')`，范围选项默认「1 年」。
-- `DonutChart` 接收分段数组（值、颜色、标签），用 SVG 圆环的 `stroke-dasharray` 绘制，段间留少量间隙；
-  `BarChart` 接收 `DailyCount[]`，柱高按最大值归一，横轴按 `days_ago` 分布刻度标签，
-  柱数超过容器宽度时横向滚动。
+- 四张图统一由 `EChart.vue` 渲染，配置由 `statisticsCharts.ts` 生成：
+  - `todayDonutOption`：今日「已完成 / 待复习」两段的环形图，扇形角度严格等于两者之比（`已完成 / （已完成 + 待复习）`）；数据全空时显示底环。
+  - `cardBreakdownOption`：四类状态占比环形图，tooltip 展示「数量（百分比）」；计数为 0 的分类不占扇形，
+    相邻扇形用 1px 卡片同色描边分隔。
+  - `reviewBarOption` / `addedBarOption`：按天柱状图，圆角柱顶 + 纵向渐变，横轴为距今天数、
+    纵轴 `minInterval: 1`，tooltip 用 `axisPointer: shadow` 并回显真实日期；
+    天数超过 60 天时才挂 `dataZoom`（滚轮缩放 + 底部滑块），避免柱子被压成细线。
+- 扇形不使用 `itemStyle.borderRadius`：ECharts 在圆角半径超过弧长时会把扇形压成圆点，
+  小占比的分类就不再是按比例画出的弧（实测占比 0.99% 时外弧半径由 82.7px 塌缩到 2.5px，0.20% 时塌缩到 0.5px）。
+  描边同理只取 1px，避免盖住占比极低的细扇形。
 - 范围切换只重取对应图表的接口。
+- 图表配色与页面主题变量对齐（`--learning-text`、`--learning-text-muted`、`--learning-border`、
+  `--learning-border-soft`、`--learning-surface`），深浅色各一套调色板。
 - 配色写入 `src/components/charts/` 的调色常量：
 
   | 分类 | 颜色 |
@@ -405,6 +419,13 @@ FROM card
   | 重新学习 | `#0f7fb8` |
 
   配色全部取自应用蓝色主题（`--learning-primary: #287df5`）的冷色阶，不使用参考图的绿 / 橙 / 红。
+- 其余图表用色：
+
+  | 图表 | 颜色 |
+  | --- | --- |
+  | 今日环形图：已完成 / 待复习 | `#287df5` / `#9db2cf` |
+  | 复习次数柱状图渐变（上浅下深） | `#5b9cf8` → `#287df5` |
+  | 新增卡片柱状图渐变（上浅下深） | `#8ab8fb` → `#5b9cf8` |
 
 - 页面根元素撑满内容区并自身滚动（`height: 100%` + `overflow-y: auto`）：`el-main` 是 `overflow: hidden` 的块级容器，根元素必须带确定高度，否则内容会被裁掉而无法上下滚动。
 - 页面沿用既有 `--learning-*` 主题变量与卡片样式，深浅色模式自动适配。
@@ -445,7 +466,7 @@ FROM card
 6. `service/statistics.rs` 口径计算与用例测试。
 7. `controller/statistics.rs`、`AppState` 与 `controller_handlers!` 接线。
 8. 前端 `types/statistics.ts`、`services/statistics.ts`、`mocks/statistics.ts`。
-9. `components/charts/` 两个图表组件、`pages/AnkiStatistics.vue`、`Sidebar.vue`、`App.vue`、`Home.vue` 接入。
+9. `components/charts/` 的 ECharts 封装、`pages/AnkiStatistics.vue`、`Sidebar.vue`、`App.vue`、`Home.vue` 接入。
 10. 清理 `pages/Statistics.vue` 与 `study` 侧旧统计契约。
 
 ---
