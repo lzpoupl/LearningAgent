@@ -17,6 +17,17 @@ use super::tool::{ToolKey, ToolRegistry};
 const DEFAULT_ICON: &str = "AI";
 const DEFAULT_COLOR: &str = "";
 
+/// 测试环境专用 Agent 的名称；仅在 debug 构建中播种。
+#[cfg(debug_assertions)]
+const DEBUG_AGENT_NAME: &str = "测试环境 Agent";
+
+/// 测试环境专用 Agent 的系统提示词，明确其职责与权限范围。
+#[cfg(debug_assertions)]
+const DEBUG_AGENT_PROMPT: &str = "\
+你是测试环境专用的调试 Agent，职责是验证 Agent 配置、工具权限与对话编排等后端能力。\
+你拥有全部工具的 allow 权限，可以直接调用任意工具完成端到端测试，无需等待用户确认。\
+回答时请明确说明当前处于测试环境，并聚焦于测试目标与验证结论。";
+
 /// Agent 服务：持有数据库连接、工具注册表与配置句柄。
 #[allow(dead_code)]
 pub struct AgentService {
@@ -148,6 +159,46 @@ impl AgentService {
         let key = ToolKey::parse(tool_id)?;
         let conn = self.conn()?;
         permission::resolve(&conn, agent_id, &key)
+    }
+
+    // ---------- 测试环境 ----------
+
+    /// 播种测试环境专用 Agent，并授予全部工具 `allow` 权限。
+    ///
+    /// 仅在 debug 构建中可用；名称已存在时直接返回既有 Agent。测试环境使用
+    /// 内存数据库，正常启动流程下每次都会重新创建。
+    #[cfg(debug_assertions)]
+    pub fn ensure_debug_agent(&self) -> Result<AgentInfo, ApiError> {
+        let conn = self.conn()?;
+        if let Some(existing) = repo::list_agents(&conn)?
+            .into_iter()
+            .find(|agent| agent.name == DEBUG_AGENT_NAME)
+        {
+            return Ok(existing);
+        }
+
+        crate::repository::with_tx(&conn, |c| {
+            let agent = repo::insert_agent(
+                c,
+                DEBUG_AGENT_NAME,
+                "测试环境专用 Agent，拥有全部工具权限",
+                DEFAULT_ICON,
+                DEFAULT_COLOR,
+                DEBUG_AGENT_PROMPT,
+            )?;
+
+            let items: Vec<AgentToolPermissionInput> = repo::list_tools(c)?
+                .into_iter()
+                .map(|tool| AgentToolPermissionInput {
+                    tool_id: format!("{}.{}", tool.group, tool.id),
+                    permission: ToolPermission::Allow,
+                })
+                .collect();
+            repo::write_tool_permissions(c, agent.id, &items)?;
+
+            repo::get_agent(c, agent.id)?
+                .ok_or_else(|| ApiError::internal("播种测试环境 Agent 后无法读取"))
+        })
     }
 }
 
@@ -300,5 +351,26 @@ mod tests {
     fn builtin_agent_is_protected() {
         let service = service();
         assert_eq!(service.delete_agent(1).unwrap_err().code, "builtin_protected");
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn debug_agent_seeds_with_full_tool_permissions() {
+        let service = service();
+
+        let agent = service.ensure_debug_agent().unwrap();
+        assert_eq!(agent.name, DEBUG_AGENT_NAME);
+        assert!(!agent.builtin);
+        assert_eq!(service.get_agent(agent.id).unwrap().name, DEBUG_AGENT_NAME);
+
+        let matrix = service.get_tool_permissions(agent.id).unwrap();
+        assert_eq!(matrix.len(), 14);
+        assert!(matrix
+            .iter()
+            .all(|entry| entry.permission == ToolPermission::Allow));
+
+        // 重复调用返回既有 Agent，不会因名称唯一约束而失败。
+        assert_eq!(service.ensure_debug_agent().unwrap().id, agent.id);
+        assert_eq!(service.list_agents().unwrap().len(), 3);
     }
 }

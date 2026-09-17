@@ -72,6 +72,12 @@ pub fn run() {
                 config.clone(),
             );
             let agent = AgentService::new(db.clone(), tool_registry.clone(), config.clone());
+
+            // 测试环境：播种拥有全部工具权限的调试 Agent。
+            #[cfg(debug_assertions)]
+            agent
+                .ensure_debug_agent()
+                .map_err(|e| format!("播种测试环境 Agent 失败: {}", e.message))?;
             let asset = AssetService::new(db.clone());
             let statistics = StatisticsService::new(db.clone());
 
