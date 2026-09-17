@@ -4,7 +4,22 @@ use rusqlite::Connection;
 
 include!(concat!(env!("OUT_DIR"), "\\migrations.rs"));
 
+/// 打开数据库连接；文件不存在时由 SQLite 新建并执行迁移。
+///
+/// 路径的父目录不存在时先创建，避免落盘时因目录缺失而失败。
 pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Connection> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+                    Some(format!("无法创建数据库目录 {}: {e}", parent.display())),
+                )
+            })?;
+        }
+    }
+
     let mut conn = Connection::open(path)?;
     prepare(&mut conn)?;
     Ok(conn)
@@ -62,6 +77,17 @@ mod tests {
 
     fn latest_version() -> u32 {
         MIGRATIONS.iter().map(|(number, _)| *number).max().unwrap_or(0)
+    }
+
+    #[test]
+    fn open_creates_database_file_and_parent_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("LearningAgent.db");
+
+        let conn = open(&path).unwrap();
+
+        assert!(path.exists());
+        assert_eq!(user_version(&conn), latest_version());
     }
 
     #[test]
