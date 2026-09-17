@@ -145,12 +145,12 @@
           <section class="settings-section">
             <div class="section-heading">
               <h2>主题风格</h2>
-              <span>深色模式基于 Element Plus 主题变量实现，切换后立即生效并保存在本机。</span>
+              <span>选择「跟随系统」时皮肤会随操作系统的浅色/深色偏好自动切换，选择结果在下次启动时恢复。</span>
             </div>
             <el-radio-group v-model="theme" class="theme-grid">
               <el-radio-button value="light">浅色</el-radio-button>
               <el-radio-button value="dark">深色</el-radio-button>
-              <el-radio-button value="mountain">自定义</el-radio-button>
+              <el-radio-button value="system">跟随系统</el-radio-button>
             </el-radio-group>
           </section>
         </el-tab-pane>

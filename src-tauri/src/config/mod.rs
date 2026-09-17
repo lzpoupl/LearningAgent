@@ -6,6 +6,7 @@
 
 pub mod anki;
 pub mod llm;
+pub mod ui;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -16,6 +17,7 @@ use crate::interface::error::ApiError;
 
 pub use anki::{AnkiConfig, SchedulerConfig};
 pub use llm::{LlmConfig, ProviderConfig};
+pub use ui::UiConfig;
 
 /// 应用配置聚合根，对应 config.toml。
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -25,6 +27,8 @@ pub struct AppConfig {
     pub anki: AnkiConfig,
     /// 大语言模型接入配置。
     pub llm: LlmConfig,
+    /// 界面外观配置。
+    pub ui: UiConfig,
 }
 
 /// 配置句柄：克隆后共享同一份配置、同一把读写锁与同一个配置文件路径。
@@ -60,26 +64,61 @@ impl ConfigHandle {
 
     /// 更新 LLM 配置：先回写 `config.toml`，成功后再更新内存，保证重启后仍在。
     pub fn set_llm(&self, llm: LlmConfig) -> Result<(), ApiError> {
+        self.update(|config| config.llm = llm.clone())
+    }
+
+    /// 读取界面外观配置快照。
+    pub fn ui(&self) -> UiConfig {
+        self.inner.read().expect("配置读写锁已中毒").ui.clone()
+    }
+
+    /// 更新界面外观配置：取值非法或写盘失败时返回错误，内存保持原值。
+    pub fn set_ui(&self, ui: UiConfig) -> Result<(), ApiError> {
+        UiConfig::validate_theme(&ui.theme)?;
+
+        self.update(|config| config.ui = ui.clone())
+    }
+
+    /// 以候选值回写 `config.toml`，成功后再替换内存中本次改动的字段。
+    ///
+    /// `apply` 会被调用两次：先在配置快照上生成待写入文件的内容，再在持有写锁的
+    /// 内存配置上重放，这样并发写入的其他字段不会被快照覆盖。
+    fn update(&self, mut apply: impl FnMut(&mut AppConfig)) -> Result<(), ApiError> {
         let candidate = {
             let guard = self.inner.read().expect("配置读写锁已中毒");
             let mut candidate = guard.clone();
-            candidate.llm = llm.clone();
+            apply(&mut candidate);
             candidate
         };
 
-        let path = self.path.read().expect("配置读写锁已中毒").clone();
-        if let Some(path) = path {
-            let text = toml::to_string_pretty(&candidate)
-                .map_err(|e| ApiError::internal(format!("配置序列化失败: {e}")))?;
-            std::fs::write(&path, text)
-                .map_err(|e| ApiError::internal(format!("配置文件写入失败: {e}")))?;
-        }
+        self.persist(&candidate)?;
 
-        self.inner.write().expect("配置读写锁已中毒").llm = llm;
+        apply(&mut self.inner.write().expect("配置读写锁已中毒"));
         Ok(())
     }
 
-    /// 记录配置文件路径，供 [`ConfigHandle::set_llm`] 回写使用。
+    /// 将配置写入 `config.toml`；未记录路径（测试场景）时只保留在内存。
+    fn persist(&self, config: &AppConfig) -> Result<(), ApiError> {
+        let path = self.path.read().expect("配置读写锁已中毒").clone();
+
+        let Some(path) = path else {
+            return Ok(());
+        };
+
+        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| ApiError::internal(format!("配置目录创建失败: {e}")))?;
+        }
+
+        let text = toml::to_string_pretty(config)
+            .map_err(|e| ApiError::internal(format!("配置序列化失败: {e}")))?;
+        std::fs::write(&path, text)
+            .map_err(|e| ApiError::internal(format!("配置文件写入失败: {e}")))?;
+
+        Ok(())
+    }
+
+    /// 记录配置文件路径，供写回使用。
     pub fn set_path(&self, path: PathBuf) {
         *self.path.write().expect("配置读写锁已中毒") = Some(path);
     }
@@ -168,6 +207,33 @@ mod tests {
         assert_eq!(handle.llm().default_provider.as_deref(), Some("deepseek"));
         // 未改动的 Anki 配置一并回写且保持一致。
         assert_eq!(reloaded.anki.scheduler.algorithm, "sm2");
+    }
+
+    #[test]
+    fn set_ui_persists_theme_and_rejects_unknown_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let handle = ConfigHandle::new(AppConfig::default());
+        handle.set_path(path.clone());
+
+        // 未配置时默认跟随系统。
+        assert_eq!(handle.ui().theme, "system");
+
+        let mut ui = handle.ui();
+        ui.theme = "dark".to_string();
+        handle.set_ui(ui).unwrap();
+
+        assert_eq!(load(&path).unwrap().ui.theme, "dark");
+        assert_eq!(handle.ui().theme, "dark");
+
+        // 非法取值既不进内存也不落盘。
+        let mut invalid = handle.ui();
+        invalid.theme = "midnight".to_string();
+        let error = handle.set_ui(invalid).unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+        assert_eq!(handle.ui().theme, "dark");
+        assert_eq!(load(&path).unwrap().ui.theme, "dark");
     }
 
     #[test]

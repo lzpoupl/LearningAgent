@@ -14,7 +14,7 @@
 
     <div class="sidebar-footer">
       <el-tooltip :content="isDark ? '切换到浅色模式' : '切换到深色模式'" placement="right">
-        <el-button class="theme-toggle" circle plain size="small" @click="handleToggleTheme">
+        <el-button class="theme-toggle" circle plain size="small" @click="toggleDark">
           <el-icon>
             <Sunny v-if="isDark" />
             <Moon v-else />
@@ -40,7 +40,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 
-import { useTheme, persistTheme } from '../../composables/useTheme'
+import { useTheme } from '../../composables/useTheme'
 import type { AppView } from '../../types/navigation'
 
 defineProps<{
@@ -51,12 +51,7 @@ const emit = defineEmits<{
   navigate: [view: AppView]
 }>()
 
-const { theme, isDark, toggleDark } = useTheme()
-
-function handleToggleTheme() {
-  toggleDark()
-  persistTheme(theme.value).catch(error => console.error(error))
-}
+const { isDark, toggleDark } = useTheme()
 
 const navigationItems: Array<{ id: AppView; label: string; icon: Component }> = [
   { id: 'home', label: '首页', icon: HomeFilled },

@@ -4,6 +4,7 @@ pub mod asset;
 pub mod llm;
 pub mod session;
 pub mod statistics;
+pub mod ui;
 
 /// 汇总各模块的 Tauri 命令。
 #[macro_export]
@@ -64,6 +65,8 @@ macro_rules! controller_handlers {
             crate::controller::llm::llm_upsert_provider,
             crate::controller::llm::llm_set_default_provider,
             crate::controller::llm::llm_test_provider,
+            crate::controller::ui::ui_get_theme,
+            crate::controller::ui::ui_set_theme,
         ]
     };
 }

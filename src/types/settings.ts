@@ -1,4 +1,4 @@
-export type UserTheme = 'light' | 'dark' | 'mountain'
+export type UserTheme = 'light' | 'dark' | 'system'
 
 export interface UserSettings {
   goal: string

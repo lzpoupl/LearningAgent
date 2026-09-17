@@ -10,3 +10,7 @@ algorithm = "sm2"
 learning_again_minutes = 1
 learning_hard_minutes = 6
 learning_good_minutes = 10
+
+[ui]
+# 界面皮肤模式：light（浅色）、dark（深色）、system（跟随操作系统深浅色）。
+theme = "system"

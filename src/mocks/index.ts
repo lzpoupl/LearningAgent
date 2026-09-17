@@ -46,6 +46,7 @@ export function setupMocks(): void {
     if (cmd.startsWith('chat_')) return chat.handle(cmd, args)
     if (cmd.startsWith('llm_')) return llm.handle(cmd, args)
     if (cmd.startsWith('settings_')) return settings.handle(cmd, args)
+    if (cmd.startsWith('ui_')) return settings.handle(cmd, args)
     if (cmd.startsWith('study_')) return study.handle(cmd, args)
     if (cmd.startsWith('stats_')) return statistics.handle(cmd, args)
     if (cmd.startsWith('user_')) return user.handle(cmd)
