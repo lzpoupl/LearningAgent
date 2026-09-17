@@ -47,20 +47,20 @@ impl AnkiService {
 
     pub fn get_subdecks(&self, deck_path: &str) -> Result<Vec<Deck>, AnkiError> {
         let conn = self.conn()?;
-        let deck_id = Self::resolve_deck_id(&conn, deck_path)?;
+        let deck_id = resolve_deck_id(&conn, deck_path)?;
         deck_repo::list_subdecks(&conn, deck_id)
     }
 
     pub fn get_cards(&self, deck_path: &str, query: CardQuery) -> Result<Vec<Card>, AnkiError> {
         let conn = self.conn()?;
-        let deck_id = Self::resolve_deck_id(&conn, deck_path)?;
+        let deck_id = resolve_deck_id(&conn, deck_path)?;
         card_repo::list_cards(&conn, deck_id, &query)
     }
 
     pub fn get_card(&self, card_id: &str) -> Result<Card, AnkiError> {
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
-        card_repo::get_card(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))
+        let id = parse_id(card_id)?;
+        card_repo::get_card(&conn, id)?.ok_or_else(|| card_not_found(card_id))
     }
 
     pub fn search_cards(&self, keyword: &str, search: CardSearch) -> Result<Vec<Card>, AnkiError> {
@@ -76,8 +76,8 @@ impl AnkiService {
     pub fn create_card(&self, new_card: NewCard) -> Result<String, AnkiError> {
         let algorithm = self.config.anki().scheduler.algorithm;
         let conn = self.conn()?;
-        let deck_id = Self::resolve_deck_id(&conn, &new_card.deck_path)?;
-        Self::ensure_concrete_deck(deck_id, &new_card.deck_path)?;
+        let deck_id = resolve_deck_id(&conn, &new_card.deck_path)?;
+        ensure_concrete_deck(deck_id, &new_card.deck_path)?;
         let id = card_repo::create_card_with_algorithm(
             &conn,
             deck_id,
@@ -90,16 +90,16 @@ impl AnkiService {
 
     pub fn move_deck(&self, source_path: &str, target_path: &str) -> Result<(), AnkiError> {
         let conn = self.conn()?;
-        let source_id = Self::resolve_deck_id(&conn, source_path)?;
-        let target_id = Self::resolve_deck_id(&conn, target_path)?;
+        let source_id = resolve_deck_id(&conn, source_path)?;
+        let target_id = resolve_deck_id(&conn, target_path)?;
         deck_repo::move_deck(&conn, source_id, target_id)
     }
 
     pub fn move_card(&self, card_id: &str, target_deck_path: &str) -> Result<(), AnkiError> {
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
-        let target_deck_id = Self::resolve_deck_id(&conn, target_deck_path)?;
-        Self::ensure_concrete_deck(target_deck_id, target_deck_path)?;
+        let id = parse_id(card_id)?;
+        let target_deck_id = resolve_deck_id(&conn, target_deck_path)?;
+        ensure_concrete_deck(target_deck_id, target_deck_path)?;
         card_repo::move_card(&conn, id, target_deck_id)
     }
 
@@ -109,91 +109,35 @@ impl AnkiService {
         content: UpdateCardContent,
     ) -> Result<(), AnkiError> {
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
+        let id = parse_id(card_id)?;
         card_repo::update_card_content(&conn, id, content.front, content.back)
     }
 
     pub fn delete_deck(&self, deck_path: &str) -> Result<(), AnkiError> {
         let conn = self.conn()?;
-        let deck_id = Self::resolve_deck_id(&conn, deck_path)?;
+        let deck_id = resolve_deck_id(&conn, deck_path)?;
         deck_repo::delete_deck(&conn, deck_id)
     }
 
     pub fn delete_card(&self, card_id: &str) -> Result<(), AnkiError> {
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
+        let id = parse_id(card_id)?;
         card_repo::delete_card(&conn, id)
     }
 
     /// 对卡片作答（重来/困难/良好/简单），计算并持久化下一次复习安排，并追加一条复习历史。
     pub fn grade_card(&self, card_id: &str, grade: CardGrade) -> Result<ReviewOutcome, AnkiError> {
-        let scheduler = self.config.anki().scheduler;
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
-        let deck_id = card_repo::deck_id_of(&conn, id)?;
-        let record =
-            card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
-        let card_repo::ScheduleRecord {
-            state,
-            algorithm,
-            scheduler_state,
-            ..
-        } = record;
-
-        let algorithm_impl = self.algorithm_for(&algorithm);
-        let memory = CardMemory {
-            state,
-            algorithm_state: Self::parse_algorithm_state(scheduler_state, card_id)?,
-        };
-
-        let now = Utc::now();
-        let decision = schedule(algorithm_impl.as_ref(), &scheduler, memory, grade, now)?;
-
-        let due_at = decision.due_at.to_rfc3339();
-        let next = card_repo::ScheduleRecord {
-            state: decision.state,
-            algorithm,
-            scheduler_state: Some(serde_json::to_string(&decision.algorithm_state).map_err(
-                |e| AnkiError {
-                    code: "internal".into(),
-                    message: format!("序列化调度状态失败: {e}"),
-                },
-            )?),
-            due_at: Some(due_at.clone()),
-        };
-
-        // 调度更新与复习历史置于同一事务，两者同成同败。
-        let tx = conn.unchecked_transaction().map_err(Self::db_error)?;
-        card_repo::save_schedule(&tx, id, &next)?;
-        card_repo::insert_review_log(
-            &tx,
-            &card_repo::ReviewLogEntry {
-                card_id: id,
-                deck_id,
-                grade,
-                prev_state: state,
-                next_state: decision.state,
-                duration_ms: 0,
-                reviewed_at: now.to_rfc3339(),
-                review_date: now.with_timezone(&Local).format("%Y-%m-%d").to_string(),
-            },
-        )?;
-        tx.commit().map_err(Self::db_error)?;
-
-        Ok(ReviewOutcome {
-            card_id: card_id.to_string(),
-            state: decision.state,
-            due_at: Some(due_at),
-        })
+        grade_card_with(&conn, &self.schedulers, &self.config, card_id, grade)
     }
 
     /// 预演四种作答等级，返回每种等级对应的下次复习安排，用于展示复习选项。
     pub fn get_review_options(&self, card_id: &str) -> Result<Vec<ReviewOption>, AnkiError> {
         let scheduler = self.config.anki().scheduler;
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
+        let id = parse_id(card_id)?;
         let record =
-            card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
+            card_repo::find_schedule(&conn, id)?.ok_or_else(|| card_not_found(card_id))?;
         let card_repo::ScheduleRecord {
             state,
             algorithm,
@@ -201,8 +145,8 @@ impl AnkiService {
             ..
         } = record;
 
-        let algorithm = self.algorithm_for(&algorithm);
-        let memory_state = Self::parse_algorithm_state(scheduler_state, card_id)?;
+        let algorithm = algorithm_for(&self.schedulers, &self.config, &algorithm);
+        let memory_state = parse_algorithm_state(scheduler_state, card_id)?;
         let now = Utc::now();
 
         let grades = [
@@ -236,12 +180,12 @@ impl AnkiService {
     /// 彻底忘记某张卡片：恢复到「刚新增」的初始记忆状态。
     pub fn reset_card(&self, card_id: &str) -> Result<ReviewOutcome, AnkiError> {
         let conn = self.conn()?;
-        let id = Self::parse_id(card_id)?;
+        let id = parse_id(card_id)?;
         let schedule =
-            card_repo::find_schedule(&conn, id)?.ok_or_else(|| Self::card_not_found(card_id))?;
+            card_repo::find_schedule(&conn, id)?.ok_or_else(|| card_not_found(card_id))?;
         let card_repo::ScheduleRecord { algorithm, .. } = schedule;
 
-        let algorithm_impl = self.algorithm_for(&algorithm);
+        let algorithm_impl = algorithm_for(&self.schedulers, &self.config, &algorithm);
         let next = card_repo::ScheduleRecord {
             state: CardState::New,
             algorithm,
@@ -283,77 +227,155 @@ impl AnkiService {
         self.config.set_scheduler(scheduler.clone());
         Ok(scheduler)
     }
+}
 
-    // ---------- 内部辅助 ----------
+// ---------- 共享辅助 ----------
+//
+// 这些函数不持有数据库连接锁，因此服务与工具（工具在 `with_conn` 内已持有连接锁，
+// 不能调用会自行加锁的 `AnkiService` 方法）都可以安全复用。
 
-    fn algorithm_for(&self, name: &str) -> Arc<dyn SchedulingAlgorithm> {
-        let configured = self.config.anki().scheduler.algorithm;
-        self.schedulers
-            .get(name)
-            .or_else(|| self.schedulers.get(configured.as_str()))
-            .or_else(|| self.schedulers.get(SM2))
-            .expect("默认算法 sm2 必须已注册")
-    }
+/// 解析卡片使用的调度算法：优先卡片自身记录的算法，其次配置的算法，最后回退 SM-2。
+pub(crate) fn algorithm_for(
+    schedulers: &SchedulerRegistry,
+    config: &ConfigHandle,
+    name: &str,
+) -> Arc<dyn SchedulingAlgorithm> {
+    let configured = config.anki().scheduler.algorithm;
+    schedulers
+        .get(name)
+        .or_else(|| schedulers.get(configured.as_str()))
+        .or_else(|| schedulers.get(SM2))
+        .expect("默认算法 sm2 必须已注册")
+}
 
-    fn parse_id(card_id: &str) -> Result<i64, AnkiError> {
-        card_id.parse::<i64>().map_err(|_| AnkiError {
-            code: "invalid_id".into(),
-            message: format!("无效的卡片 id: {card_id}"),
-        })
-    }
+pub(crate) fn parse_id(card_id: &str) -> Result<i64, AnkiError> {
+    card_id.parse::<i64>().map_err(|_| AnkiError {
+        code: "invalid_id".into(),
+        message: format!("无效的卡片 id: {card_id}"),
+    })
+}
 
-    fn parse_algorithm_state(
-        raw: Option<String>,
-        card_id: &str,
-    ) -> Result<Option<serde_json::Value>, AnkiError> {
-        match raw {
-            Some(json) if !json.trim().is_empty() => {
-                serde_json::from_str(&json)
-                    .map(Some)
-                    .map_err(|e| AnkiError {
-                        code: "invalid_state".into(),
-                        message: format!("卡片 {card_id} 的调度状态无法解析: {e}"),
-                    })
-            }
-            _ => Ok(None),
+pub(crate) fn parse_algorithm_state(
+    raw: Option<String>,
+    card_id: &str,
+) -> Result<Option<serde_json::Value>, AnkiError> {
+    match raw {
+        Some(json) if !json.trim().is_empty() => {
+            serde_json::from_str(&json).map(Some).map_err(|e| AnkiError {
+                code: "invalid_state".into(),
+                message: format!("卡片 {card_id} 的调度状态无法解析: {e}"),
+            })
         }
+        _ => Ok(None),
     }
+}
 
-    fn db_error(e: rusqlite::Error) -> AnkiError {
-        AnkiError {
-            code: "db".into(),
-            message: e.to_string(),
-        }
+pub(crate) fn db_error(e: rusqlite::Error) -> AnkiError {
+    AnkiError {
+        code: "db".into(),
+        message: e.to_string(),
     }
+}
 
-    fn card_not_found(card_id: &str) -> AnkiError {
-        AnkiError {
-            code: "not_found".into(),
-            message: format!("卡片不存在: {card_id}"),
-        }
+pub(crate) fn card_not_found(card_id: &str) -> AnkiError {
+    AnkiError {
+        code: "not_found".into(),
+        message: format!("卡片不存在: {card_id}"),
     }
+}
 
-    fn deck_not_found(deck_path: &str) -> AnkiError {
-        AnkiError {
-            code: "not_found".into(),
-            message: format!("牌组不存在: {deck_path}"),
-        }
+pub(crate) fn deck_not_found(deck_path: &str) -> AnkiError {
+    AnkiError {
+        code: "not_found".into(),
+        message: format!("牌组不存在: {deck_path}"),
     }
+}
 
-    fn resolve_deck_id(conn: &rusqlite::Connection, deck_path: &str) -> Result<i64, AnkiError> {
-        deck_repo::resolve_deck(conn, deck_path)?.ok_or_else(|| Self::deck_not_found(deck_path))
-    }
+/// 解析牌组路径；路径未命中返回 `not_found`。
+pub(crate) fn resolve_deck_id(
+    conn: &rusqlite::Connection,
+    deck_path: &str,
+) -> Result<i64, AnkiError> {
+    deck_repo::resolve_deck(conn, deck_path)?.ok_or_else(|| deck_not_found(deck_path))
+}
 
-    /// 卡片必须放在具体牌组下，不能放在根（id = 0）。
-    fn ensure_concrete_deck(deck_id: i64, deck_path: &str) -> Result<(), AnkiError> {
-        if deck_id == 0 {
-            return Err(AnkiError {
-                code: "invalid_path".into(),
-                message: format!("卡片必须放在具体牌组下，不能放在根: {deck_path}"),
-            });
-        }
-        Ok(())
+/// 卡片必须放在具体牌组下，不能放在根（id = 0）。
+pub(crate) fn ensure_concrete_deck(deck_id: i64, deck_path: &str) -> Result<(), AnkiError> {
+    if deck_id == 0 {
+        return Err(AnkiError {
+            code: "invalid_path".into(),
+            message: format!("卡片必须放在具体牌组下，不能放在根: {deck_path}"),
+        });
     }
+    Ok(())
+}
+
+/// 作答：校验 id → 读取调度记录 → 计算决策 → 同事务写 save_schedule + insert_review_log。
+///
+/// 调用方需已持有数据库连接；调度更新与复习历史同成同败。
+pub fn grade_card_with(
+    conn: &rusqlite::Connection,
+    schedulers: &SchedulerRegistry,
+    config: &ConfigHandle,
+    card_id: &str,
+    grade: CardGrade,
+) -> Result<ReviewOutcome, AnkiError> {
+    let scheduler = config.anki().scheduler;
+    let id = parse_id(card_id)?;
+    let deck_id = card_repo::deck_id_of(conn, id)?;
+    let record = card_repo::find_schedule(conn, id)?.ok_or_else(|| card_not_found(card_id))?;
+    let card_repo::ScheduleRecord {
+        state,
+        algorithm,
+        scheduler_state,
+        ..
+    } = record;
+
+    let algorithm_impl = algorithm_for(schedulers, config, &algorithm);
+    let memory = CardMemory {
+        state,
+        algorithm_state: parse_algorithm_state(scheduler_state, card_id)?,
+    };
+
+    let now = Utc::now();
+    let decision = schedule(algorithm_impl.as_ref(), &scheduler, memory, grade, now)?;
+
+    let due_at = decision.due_at.to_rfc3339();
+    let next = card_repo::ScheduleRecord {
+        state: decision.state,
+        algorithm,
+        scheduler_state: Some(
+            serde_json::to_string(&decision.algorithm_state).map_err(|e| AnkiError {
+                code: "internal".into(),
+                message: format!("序列化调度状态失败: {e}"),
+            })?,
+        ),
+        due_at: Some(due_at.clone()),
+    };
+
+    // 调度更新与复习历史置于同一事务，两者同成同败。
+    let tx = conn.unchecked_transaction().map_err(db_error)?;
+    card_repo::save_schedule(&tx, id, &next)?;
+    card_repo::insert_review_log(
+        &tx,
+        &card_repo::ReviewLogEntry {
+            card_id: id,
+            deck_id,
+            grade,
+            prev_state: state,
+            next_state: decision.state,
+            duration_ms: 0,
+            reviewed_at: now.to_rfc3339(),
+            review_date: now.with_timezone(&Local).format("%Y-%m-%d").to_string(),
+        },
+    )?;
+    tx.commit().map_err(db_error)?;
+
+    Ok(ReviewOutcome {
+        card_id: card_id.to_string(),
+        state: decision.state,
+        due_at: Some(due_at),
+    })
 }
 
 /// 将到期时间格式化为便于展示的时间间隔文案。

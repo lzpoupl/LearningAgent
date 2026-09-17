@@ -41,9 +41,10 @@ Agent / 工具元数据、工具三级权限与 bucket 文件系统适配；本�
 
 ### 1.2 本阶段不做
 
-- **具体工具实现**：`ToolRegistry` 仍为空。循环对「目录中存在但未注册实现」的工具返回
-  `tool_unavailable` 的工具结果，保证循环可运行、可测试；各 `anki.*` / `asset.*` / `user.*`
-  的真实实现属后续阶段。
+- **`asset.*` / `user.*` 工具实现**：Anki 的 10 个工具已在本阶段落地（实现于
+  `service/tool/anki.rs`，参数与返回契约由 `migrations/000005.sql` 覆盖，启动时校验
+  「已注册 ⊆ 工具目录」）；其余工具仍未实现，循环返回 `tool_unavailable` 的工具结果，
+  保证循环可运行、可测试。
 - **带工具请求的 token 级流式**：edgee 2.0.7 的流式工具调用分片无法可靠组装（见 5.1），
   因此带工具的一轮走非流式；流式只在「本轮没有可调用工具」时启用。
 - **`temperature` / `max_tokens` 配置**：edgee 的请求体未暴露这两个参数，由网关与模型
@@ -629,7 +630,9 @@ CREATE INDEX idx_message_session ON message (session_id, id);
 | `config/llm.rs`              | `LlmConfig` / `ProviderConfig` 与默认值                                  | —                                                           |
 | `repository/session.rs`      | `session` / `message` 的 SQL 读写与状态收敛，含 `set_session_model`      | interface, db                                               |
 | `repository/agent.rs`        | 既有实现（本阶段不修改）                                                 | interface, db                                               |
-| `service/tool/mod.rs`        | `ToolKey`、`Tool::execute`、`ToolRegistry::execute`                      | interface, config                                           |
+| `service/tool/mod.rs`        | `ToolKey`、`Tool::execute`、`ToolRegistry`、`validate_registry`            | interface, config, repository                               |
+| `service/tool/anki.rs`       | 10 个 `anki.*` 工具实现与注册入口                                        | service/anki, repository, interface                         |
+| `service/tool/args.rs`       | 工具参数解析助手（缺省/类型收敛与 `invalid_input`）                      | interface                                                    |
 | `service/llm/mod.rs`         | `LlmBackend` 抽象、`LlmClient`、provider 解析、超时/重试/流式包装         | config, interface, edgee                                    |
 | `service/llm/edgee.rs`       | `EdgeeBackend`：DTO → `edgee::Message` / `Tool` 映射、线名映射、错误转换   | interface, edgee, tokio                                     |
 | `service/event.rs`           | `EventEmitter` 抽象与 `ChannelEmitter`（唯一接触 Tauri 类型的服务层文件） | interface, tauri                                            |

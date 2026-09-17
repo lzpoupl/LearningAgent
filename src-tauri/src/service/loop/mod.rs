@@ -644,12 +644,31 @@ mod tests {
     use crate::config::{AppConfig, LlmConfig, ProviderConfig};
     use crate::interface::llm::ChatRequest;
     use crate::interface::session::ToolCall;
-    use crate::repository::db;
+    use crate::repository::{db, deck as deck_repo};
     use crate::service::event::RecordingEmitter;
     use crate::service::llm::{BoxFut, LlmBackend};
-    use crate::service::tool::{Tool, ToolOutcome};
+    use crate::service::scheduler::SchedulerRegistry;
+    use crate::service::tool::{anki, Tool, ToolOutcome};
 
     const TURN_ID: &str = "t-1";
+
+    /// 测试用 LLM 配置：固定 edgee provider 与模型。
+    fn test_app_config() -> AppConfig {
+        let mut app = AppConfig::default();
+        let mut llm_config = LlmConfig::default();
+        llm_config.default_provider = Some("edgee".to_string());
+        llm_config.providers.insert(
+            "edgee".to_string(),
+            ProviderConfig {
+                base_url: "https://edgee.io".to_string(),
+                api_key: "sk-test".to_string(),
+                model: "model-a".to_string(),
+                compression_model: None,
+            },
+        );
+        app.llm = llm_config;
+        app
+    }
 
     fn plain(content: &str) -> ChatResponse {
         ChatResponse {
@@ -668,6 +687,24 @@ mod tests {
                 id: call_id.to_string(),
                 tool_id: tool_id.to_string(),
                 arguments: serde_json::json!({ "value": 1 }),
+            }],
+            finish_reason: Some("tool_calls".to_string()),
+            usage: None,
+            compression: None,
+        }
+    }
+
+    fn tool_call_response(
+        tool_id: &str,
+        call_id: &str,
+        arguments: serde_json::Value,
+    ) -> ChatResponse {
+        ChatResponse {
+            content: String::new(),
+            tool_calls: vec![ToolCall {
+                id: call_id.to_string(),
+                tool_id: tool_id.to_string(),
+                arguments,
             }],
             finish_reason: Some("tool_calls".to_string()),
             usage: None,
@@ -799,20 +836,8 @@ mod tests {
         )
         .unwrap();
 
-        let mut app = AppConfig::default();
-        let mut llm_config = LlmConfig::default();
-        llm_config.default_provider = Some("edgee".to_string());
-        llm_config.max_steps = max_steps;
-        llm_config.providers.insert(
-            "edgee".to_string(),
-            ProviderConfig {
-                base_url: "https://edgee.io".to_string(),
-                api_key: "sk-test".to_string(),
-                model: "model-a".to_string(),
-                compression_model: None,
-            },
-        );
-        app.llm = llm_config;
+        let mut app = test_app_config();
+        app.llm.max_steps = max_steps;
         let config = ConfigHandle::new(app);
 
         let backend: Arc<dyn LlmBackend> = if responses.is_empty() {
@@ -849,6 +874,47 @@ mod tests {
     fn fixture(responses: Vec<ChatResponse>, register_tools: bool, max_steps: u32) -> Fixture {
         let script: Arc<dyn LlmBackend> = Arc::new(ScriptBackend::new(responses));
         fixture_with(Vec::new(), script, register_tools, max_steps)
+    }
+
+    /// 注册真实 anki 工具的夹具；内置 Agent 1 已按迁移获得工具授权。
+    fn anki_fixture(responses: Vec<ChatResponse>) -> Fixture {
+        let conn = db::open_in_memory().unwrap();
+        let session = session_repo::insert_session(&conn, 1, "新会话").unwrap();
+        session_repo::append_message(
+            &conn,
+            session.id,
+            &session_repo::NewMessage::new(MessageRole::System, "你是助手"),
+        )
+        .unwrap();
+        session_repo::append_message(
+            &conn,
+            session.id,
+            &session_repo::NewMessage::new(MessageRole::User, "你好").with_turn_id(TURN_ID),
+        )
+        .unwrap();
+        // add_card 默认权限为 ask，这里放行以验证工具真正落库。
+        conn.execute(
+            "UPDATE agent_tool SET permission = 'allow'
+              WHERE agent_id = 1 AND tool_group = 'anki' AND tool_id = 'add_card'",
+            [],
+        )
+        .unwrap();
+
+        let config = ConfigHandle::new(test_app_config());
+        let mut tools = ToolRegistry::new();
+        anki::register(&mut tools, Arc::new(SchedulerRegistry::new()));
+
+        Fixture {
+            deps: TurnDeps {
+                db: Arc::new(Mutex::new(conn)),
+                tools: Arc::new(tools),
+                llm: LlmClient::new(config.clone(), Arc::new(ScriptBackend::new(responses))),
+                config,
+            },
+            registry: Arc::new(TurnRegistry::new()),
+            emitter: Arc::new(RecordingEmitter::new()),
+            session_id: session.id,
+        }
     }
 
     fn target() -> LlmTarget {
@@ -1155,5 +1221,59 @@ mod tests {
             count_events(&tooled, |e| matches!(e, AgentEvent::MessageDelta { .. })),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn anki_list_decks_runs_against_real_registry() {
+        let fixture = anki_fixture(vec![
+            tool_call_response(
+                "anki.list_decks",
+                "call-1",
+                serde_json::json!({ "deckPath": "/" }),
+            ),
+            plain("最终回答"),
+        ]);
+        with_conn(&fixture.deps.db, |conn| {
+            deck_repo::create_deck(conn, "/测试")?;
+            Ok(())
+        })
+        .unwrap();
+
+        let outcome = run(&fixture).await;
+        assert_eq!(outcome.status, TurnStatus::Completed);
+
+        let stored = messages(&fixture);
+        let tool_message = stored
+            .iter()
+            .find(|message| message.role == MessageRole::Tool)
+            .expect("应有工具结果消息");
+        assert!(tool_message.content.contains("\"ok\":true"));
+        assert!(tool_message.content.contains("/测试"));
+    }
+
+    #[tokio::test]
+    async fn anki_add_card_persists_to_database() {
+        let fixture = anki_fixture(vec![
+            tool_call_response(
+                "anki.add_card",
+                "call-1",
+                serde_json::json!({ "deckPath": "/测试", "front": "f", "back": "b" }),
+            ),
+            plain("已创建"),
+        ]);
+        with_conn(&fixture.deps.db, |conn| {
+            deck_repo::create_deck(conn, "/测试")?;
+            Ok(())
+        })
+        .unwrap();
+
+        let outcome = run(&fixture).await;
+        assert_eq!(outcome.status, TurnStatus::Completed);
+
+        let cards: i64 = with_conn(&fixture.deps.db, |conn| {
+            Ok(conn.query_row("SELECT COUNT(*) FROM card", [], |row| row.get(0))?)
+        })
+        .unwrap();
+        assert_eq!(cards, 1);
     }
 }

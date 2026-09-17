@@ -1,7 +1,10 @@
 //! 工具引用与工具执行扩展点。
 //!
-//! 本阶段只固定扩展点：工具元数据由迁移播种并落在 `tool` 表，注册表为空，
-//! 后续阶段再在 `service/tool` 下实现具体工具并注册。
+//! 工具元数据由迁移播种并落在 `tool` 表，具体实现在 `service/tool` 下按工具组注册；
+//! 尚未实现的工具（`asset.*` / `user.*`）继续返回 `tool_unavailable`。
+
+pub mod anki;
+mod args;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -12,6 +15,7 @@ use rusqlite::Connection;
 use crate::config::ConfigHandle;
 use crate::interface::agent::split_tool_id;
 use crate::interface::error::ApiError;
+use crate::repository::agent as agent_repo;
 
 /// `<group>.<id>` 形式的工具引用。
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -67,7 +71,7 @@ pub trait Tool: Send + Sync {
     ) -> Result<ToolOutcome, ApiError>;
 }
 
-/// 工具实现注册表；本阶段为空。
+/// 工具实现注册表；按工具引用索引已实现的工具。
 #[derive(Default)]
 pub struct ToolRegistry {
     tools: HashMap<ToolKey, Arc<dyn Tool>>,
@@ -89,6 +93,11 @@ impl ToolRegistry {
         self.tools.get(key).cloned()
     }
 
+    /// 已注册的工具引用；顺序不固定，调用方按集合语义比较。
+    pub fn keys(&self) -> impl Iterator<Item = &ToolKey> {
+        self.tools.keys()
+    }
+
     /// 执行工具；目录中存在但未注册实现时返回 `tool_unavailable`。
     pub fn execute(
         &self,
@@ -101,6 +110,20 @@ impl ToolRegistry {
             None => Err(ApiError::tool_unavailable(format!("工具尚未实现: {key}"))),
         }
     }
+}
+
+/// 校验「已注册的工具 ⊆ 工具目录」，防止代码实现与迁移播种漂移。
+///
+/// 只做单向校验：目录里允许存在尚未实现的工具（`asset.*` / `user.*`）。
+pub fn validate_registry(registry: &ToolRegistry, conn: &Connection) -> Result<(), ApiError> {
+    for key in registry.keys() {
+        if agent_repo::get_tool(conn, &key.group, &key.id)?.is_none() {
+            return Err(ApiError::internal(format!(
+                "工具目录中不存在已注册的工具: {key}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -156,5 +179,64 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(err.code, "tool_unavailable");
+    }
+
+    struct StubTool {
+        group: &'static str,
+        id: &'static str,
+    }
+
+    impl Tool for StubTool {
+        fn key(&self) -> ToolKey {
+            ToolKey {
+                group: self.group.to_string(),
+                id: self.id.to_string(),
+            }
+        }
+
+        fn execute(
+            &self,
+            _ctx: &ToolContext<'_>,
+            _arguments: serde_json::Value,
+        ) -> Result<ToolOutcome, ApiError> {
+            Ok(ToolOutcome::new(serde_json::json!({})))
+        }
+    }
+
+    #[test]
+    fn keys_lists_registered_tools() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(StubTool {
+            group: "anki",
+            id: "list_decks",
+        }));
+        registry.register(Arc::new(StubTool {
+            group: "asset",
+            id: "read",
+        }));
+
+        let mut keys: Vec<String> = registry.keys().map(|key| key.to_string()).collect();
+        keys.sort();
+        assert_eq!(keys, vec!["anki.list_decks", "asset.read"]);
+    }
+
+    #[test]
+    fn validate_registry_accepts_catalog_subset_and_rejects_unknown() {
+        let conn = crate::repository::db::open_in_memory().unwrap();
+
+        let mut known = ToolRegistry::new();
+        known.register(Arc::new(StubTool {
+            group: "anki",
+            id: "list_decks",
+        }));
+        validate_registry(&known, &conn).unwrap();
+
+        let mut unknown = ToolRegistry::new();
+        unknown.register(Arc::new(StubTool {
+            group: "anki",
+            id: "nope",
+        }));
+        let err = validate_registry(&unknown, &conn).unwrap_err();
+        assert_eq!(err.code, "internal");
     }
 }

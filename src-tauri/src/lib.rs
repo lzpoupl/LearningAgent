@@ -34,7 +34,7 @@ pub struct AppState {
     pub session: SessionService,
     /// 模型客户端：provider 解析、调用与探测。
     pub llm: LlmClient,
-    /// 工具实现注册表：本阶段为空，各 service 共享同一实例。
+    /// 工具实现注册表：启动时注册 anki 工具，各 service 共享同一实例。
     pub tool_registry: Arc<ToolRegistry>,
     /// 全局配置句柄：与各层注入的句柄共享同一份配置。
     pub config: ConfigHandle,
@@ -63,14 +63,19 @@ pub fn run() {
                 repository::db::open(data_dir.join("learningagent.db"))?
             };
 
-            let db = Arc::new(Mutex::new(conn));
-            let tool_registry = Arc::new(ToolRegistry::new());
+            // 调度算法注册表只建一次，Anki 服务与工具共享同一份实现。
+            let schedulers = Arc::new(SchedulerRegistry::new());
 
-            let anki = AnkiService::new(
-                db.clone(),
-                Arc::new(SchedulerRegistry::new()),
-                config.clone(),
-            );
+            // 注册工具实现，并在迁移已执行的前提下校验「实现 ⊆ 目录」，fail fast。
+            let mut tool_registry = ToolRegistry::new();
+            service::tool::anki::register(&mut tool_registry, schedulers.clone());
+            service::tool::validate_registry(&tool_registry, &conn)
+                .map_err(|e| format!("工具注册表校验失败: {}", e.message))?;
+
+            let db = Arc::new(Mutex::new(conn));
+            let tool_registry = Arc::new(tool_registry);
+
+            let anki = AnkiService::new(db.clone(), schedulers, config.clone());
             let agent = AgentService::new(db.clone(), tool_registry.clone(), config.clone());
 
             // 测试环境：播种拥有全部工具权限的调试 Agent。
