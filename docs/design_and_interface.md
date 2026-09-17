@@ -35,7 +35,7 @@ Agent可以对资产进行读写，但要经过权限模块，要具体到某个
 
 - LearningAgent.exe
 - config.toml
-- db.sqlite
+- LearningAgent.db
 
 ## Anki模块
 
