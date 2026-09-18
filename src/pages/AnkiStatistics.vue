@@ -10,82 +10,10 @@
 
     <div v-if="errorMessage" class="load-error" role="alert">{{ errorMessage }}</div>
 
-    <section class="panel-grid">
-      <article class="panel">
-        <div class="section-heading">
-          <div>
-            <span class="panel-kicker">TODAY</span>
-            <h2>今日学习统计</h2>
-          </div>
-        </div>
-
-        <div class="today-body">
-          <div class="donut-wrap">
-            <EChart
-              :option="todayOption"
-              height="176px"
-              aria-label="今日卡片完成比例"
-            />
-            <div class="donut-center">
-              <strong class="donut-value">{{ today?.pendingCards ?? 0 }}</strong>
-              <span class="donut-label">今日待复习卡片</span>
-            </div>
-          </div>
-
-          <div class="today-metrics">
-            <div>
-              <strong>{{ today?.reviewedCards ?? 0 }}/{{ today?.totalCards ?? 0 }}</strong>
-              <small>完成任务</small>
-            </div>
-            <div>
-              <strong>{{ today?.totalCards ?? 0 }}</strong>
-              <small>卡片总数</small>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="section-heading">
-          <div>
-            <span class="panel-kicker">CARDS</span>
-            <h2>卡片数量</h2>
-          </div>
-        </div>
-
-        <div class="breakdown-body">
-          <div class="donut-wrap">
-            <EChart
-              :option="breakdownOption"
-              height="176px"
-              aria-label="卡片数量占比"
-            />
-            <div class="donut-center">
-              <strong class="donut-value">{{ breakdown?.total ?? 0 }}</strong>
-              <span class="donut-label">卡片总数</span>
-            </div>
-          </div>
-
-          <table class="legend">
-            <tbody>
-              <tr v-for="item in breakdown?.categories ?? []" :key="item.category">
-                <td class="legend-name">
-                  <i class="legend-dot" :style="{ background: CATEGORY_COLORS[item.category] }" />
-                  {{ item.label }}
-                </td>
-                <td class="legend-count">{{ item.count }}</td>
-                <td class="legend-percent">{{ item.percent }}%</td>
-              </tr>
-              <tr class="legend-total">
-                <td class="legend-name">总计</td>
-                <td class="legend-count">{{ breakdown?.total ?? 0 }}</td>
-                <td class="legend-percent" />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </article>
-    </section>
+    <StatisticsOverview
+      :today="today"
+      :breakdown="breakdown"
+    />
 
     <section class="panel chart-panel">
       <div class="section-heading">
@@ -167,12 +95,10 @@ import { Refresh } from '@element-plus/icons-vue'
 import EChart from '../components/charts/EChart.vue'
 import {
   addedBarOption,
-  cardBreakdownOption,
   reviewBarOption,
-  todayDonutOption,
 } from '../components/charts/statisticsCharts'
-import { CATEGORY_COLORS } from '../components/charts/statisticsColors'
 import PageHeader from '../components/common/PageHeader.vue'
+import StatisticsOverview from '../components/statistics/StatisticsOverview.vue'
 import { useTheme } from '../composables/useTheme'
 import {
   getAddedCards,
@@ -206,8 +132,6 @@ const errorMessage = ref('')
 
 const { isDark } = useTheme()
 
-const todayOption = computed(() => todayDonutOption(today.value, isDark.value))
-const breakdownOption = computed(() => cardBreakdownOption(breakdown.value, isDark.value))
 const reviewOption = computed(() =>
   reviewBarOption(reviewHistory.value?.days ?? [], isDark.value),
 )
@@ -270,12 +194,6 @@ onMounted(reloadAll)
   background: var(--learning-bg);
 }
 
-.panel-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
 .panel {
   padding: 22px 26px 26px;
   border: 1px solid var(--learning-border);
@@ -308,108 +226,11 @@ onMounted(reloadAll)
   font-size: 17px;
 }
 
-
 .panel-caption {
   margin: 12px 0 0;
   color: var(--learning-text-muted);
   font-size: 12px;
   text-align: center;
-}
-
-.today-body,
-.breakdown-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  margin-top: 18px;
-}
-
-.donut-wrap {
-  position: relative;
-  width: 176px;
-  height: 176px;
-  flex: none;
-}
-
-.donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  color: var(--learning-text);
-  text-align: center;
-  pointer-events: none;
-}
-
-.donut-value {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.donut-label {
-  max-width: 90px;
-  color: var(--learning-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.today-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.today-metrics strong {
-  display: block;
-  color: var(--learning-text);
-  font-size: 22px;
-}
-
-.today-metrics small {
-  color: var(--learning-text-muted);
-  font-size: 11px;
-}
-
-.legend {
-  flex: 1;
-  min-width: 0;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.legend td {
-  padding: 3px 0;
-  color: var(--learning-text-secondary);
-}
-
-.legend-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-}
-
-.legend-count,
-.legend-percent {
-  width: 52px;
-  color: var(--learning-text-muted);
-  text-align: right;
-}
-
-.legend-total td {
-  padding-top: 8px;
-  color: var(--learning-text);
-  font-weight: 600;
 }
 
 .chart-summary {
@@ -433,12 +254,6 @@ onMounted(reloadAll)
   font-size: 13px;
 }
 
-@media (max-width: 980px) {
-  .panel-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 620px) {
   .stats-page {
     padding: 28px 16px 48px;
@@ -446,11 +261,6 @@ onMounted(reloadAll)
 
   .panel {
     padding: 20px 16px;
-  }
-
-  .today-body,
-  .breakdown-body {
-    flex-direction: column;
   }
 }
 </style>

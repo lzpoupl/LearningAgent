@@ -30,78 +30,19 @@
           </button>
         </div>
 
-        <div class="home-columns">
-          <section class="card section-card">
-            <div class="section-title">
-              <strong>今日学习计划</strong>
-              <span>{{ todayLabel }}</span>
-            </div>
+        <StatisticsOverview
+          class="home-stats"
+          :today="todayStats"
+          :breakdown="breakdown"
+        />
 
-            <div
-              v-for="task in tasks"
-              :key="task.id"
-              class="task"
-            >
-              <input
-                v-model="task.done"
-                class="checkbox"
-                type="checkbox"
-                :disabled="taskUpdating === task.id"
-                @change="toggleTask(task)"
-              />
-
-              <div class="task-main">
-                {{ task.title }}
-                <small>{{ task.detail }}</small>
-              </div>
-
-              <span class="task-time">{{ taskTime(task.minutes) }}</span>
-            </div>
-          </section>
-
-          <section class="card section-card">
-            <div class="section-title">
-              <strong>今日学习统计</strong>
-              <button
-                class="section-link"
-                type="button"
-                @click="emit('open-anki')"
-              >
-                进入复习 →
-              </button>
-            </div>
-
-            <div
-              class="stats-circle"
-              :style="circleStyle"
-            >
-              <div class="stats-circle-content">
-                <strong>{{ statsLoading ? '…' : dueTodayCount }}</strong>
-                <span>今日待复习卡片</span>
-              </div>
-            </div>
-
-            <p
-              v-if="statsError"
-              class="stats-error"
-              role="alert"
-            >
-              {{ statsError }}
-            </p>
-
-            <div class="mini-stats">
-              <div>
-                <strong>{{ doneTaskCount }}/{{ tasks.length }}</strong>
-                <small>完成任务</small>
-              </div>
-
-              <div>
-                <strong>{{ statsLoading ? '…' : totalCardCount }}</strong>
-                <small>卡片总数</small>
-              </div>
-            </div>
-          </section>
-        </div>
+        <p
+          v-if="statsError"
+          class="stats-error"
+          role="alert"
+        >
+          {{ statsError }}
+        </p>
       </div>
     </div>
   </main>
@@ -111,18 +52,16 @@
 import { computed, onMounted, ref } from 'vue'
 
 import AgentGlyph from '../components/agent/AgentGlyph.vue'
+import StatisticsOverview from '../components/statistics/StatisticsOverview.vue'
 import { listAgents } from '../services/agent'
-import { getTodayProgress } from '../services/statistics'
-import { getTodayOverview, updateStudyTask } from '../services/study'
+import { getCardBreakdown, getTodayProgress } from '../services/statistics'
 import type { AgentInfo, AgentType } from '../types/chat'
-import type { TodayProgress } from '../types/statistics'
-import type { StudyTask, TodayOverview } from '../types/study'
+import type { CardBreakdown, TodayProgress } from '../types/statistics'
 
 const emit = defineEmits<{
   'start-chat': [agent: AgentType]
   'open-agents': []
   'open-assets': []
-  'open-anki': []
 }>()
 
 interface QuickAction {
@@ -136,12 +75,9 @@ interface QuickAction {
 }
 
 const agents = ref<AgentInfo[]>([])
-const tasks = ref<StudyTask[]>([])
-const overview = ref<TodayOverview | null>(null)
 const todayStats = ref<TodayProgress | null>(null)
-const statsLoading = ref(false)
+const breakdown = ref<CardBreakdown | null>(null)
 const statsError = ref('')
-const taskUpdating = ref('')
 
 const quickActions = computed<QuickAction[]>(() => {
   const agentActions = agents.value
@@ -195,57 +131,6 @@ const greeting = computed(() => {
   return '晚上好'
 })
 
-const todayLabel = computed(() => {
-  const now = overview.value?.date ? new Date(overview.value.date) : new Date()
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
-  return `${now.getMonth() + 1}月${now.getDate()}日 · ${weekdays[now.getDay()]}`
-})
-
-const doneTaskCount = computed(
-  () => tasks.value.filter(task => task.done).length
-)
-
-const totalCardCount = computed(() => todayStats.value?.totalCards ?? 0)
-const dueTodayCount = computed(() => todayStats.value?.pendingCards ?? 0)
-
-/** 环形图展示今日完成比例，中心显示今日待复习卡片数。 */
-const circleStyle = computed(() => {
-  const percent = Math.min(
-    100,
-    Math.round(todayStats.value?.completionPercent ?? 0)
-  )
-
-  return {
-    background: `conic-gradient(var(--primary) 0 ${percent}%, var(--track) ${percent}% 100%)`
-  }
-})
-
-function taskTime(minutes: number): string {
-  return `${(minutes / 60).toFixed(1)}h`
-}
-
-async function toggleTask(task: StudyTask) {
-  const previous = !task.done
-  if (taskUpdating.value) {
-    task.done = previous
-    return
-  }
-
-  taskUpdating.value = task.id
-  statsError.value = ''
-  try {
-    const updatedTask = await updateStudyTask(task.id, task.done)
-    Object.assign(task, updatedTask)
-  } catch (error) {
-    console.error(error)
-    task.done = previous
-    statsError.value = '学习计划更新失败，请重试。'
-  } finally {
-    taskUpdating.value = ''
-  }
-}
-
 function openQuickAction(action: QuickAction) {
   if (action.agent) {
     emit('start-chat', action.agent)
@@ -257,24 +142,20 @@ function openQuickAction(action: QuickAction) {
 }
 
 async function loadStats() {
-  statsLoading.value = true
   statsError.value = ''
 
   try {
-    const [loadedOverview, loadedAgents, loadedStats] = await Promise.all([
-      getTodayOverview(),
+    const [loadedAgents, loadedStats, loadedBreakdown] = await Promise.all([
       listAgents(),
       getTodayProgress(),
+      getCardBreakdown(),
     ])
-    overview.value = loadedOverview
-    tasks.value = loadedOverview.tasks
     agents.value = loadedAgents
     todayStats.value = loadedStats
+    breakdown.value = loadedBreakdown
   } catch (error) {
     console.error(error)
     statsError.value = '首页数据加载失败，请稍后重试。'
-  } finally {
-    statsLoading.value = false
   }
 }
 
@@ -433,140 +314,15 @@ onMounted(loadStats)
   margin-top: 6px;
 }
 
-.home-columns {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 16px;
+.home-stats {
   margin-top: 16px;
 }
 
-.section-card {
-  padding: 20px;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 17px;
-}
-
-.section-title strong {
-  font-size: 14px;
-}
-
-.section-title span {
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-.section-link {
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 11px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.section-link:hover {
-  color: var(--primary);
-}
-
-.task {
-  display: flex;
-  align-items: center;
-  min-height: 45px;
-  border-bottom: 1px solid #f0f3f7;
-}
-
-.task:last-child {
-  border-bottom: 0;
-}
-
-.checkbox {
-  width: 17px;
-  height: 17px;
-  margin-right: 10px;
-  accent-color: var(--primary);
-}
-
-.task-main {
-  flex: 1;
-  font-size: 12px;
-}
-
-.task-main small {
-  display: block;
-  color: var(--text-3);
-  margin-top: 3px;
-  font-size: 10px;
-}
-
-.task-time {
-  color: var(--text-2);
-  font-size: 10px;
-}
-
-.stats-circle {
-  position: relative;
-  width: 125px;
-  height: 125px;
-  margin: 12px auto 15px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-}
-
-.stats-circle::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: var(--surface);
-}
-
-.stats-circle-content {
-  position: relative;
-  z-index: 1;
-  text-align: center;
-}
-
-.stats-circle strong {
-  display: block;
-  font-size: 23px;
-}
-
-.stats-circle span {
-  font-size: 10px;
-  color: var(--text-3);
-}
-
 .stats-error {
-  margin: 0 0 12px;
-  text-align: center;
+  margin: 12px 0 0;
   color: #ef6a6a;
-  font-size: 10px;
-}
-
-.mini-stats {
-  display: flex;
-  justify-content: space-around;
+  font-size: 12px;
   text-align: center;
-}
-
-.mini-stats strong {
-  font-size: 15px;
-}
-
-.mini-stats small {
-  display: block;
-  color: var(--text-3);
-  margin-top: 4px;
-  font-size: 10px;
 }
 
 .home-scroll::-webkit-scrollbar {
@@ -623,10 +379,6 @@ html.dark .home-page .quick-icon.orange {
   color: #e0a94a;
 }
 
-html.dark .home-page .task {
-  border-bottom-color: var(--learning-border);
-}
-
 html.dark .home-page .home-scroll::-webkit-scrollbar-thumb {
   background: var(--learning-border);
 }
@@ -634,10 +386,6 @@ html.dark .home-page .home-scroll::-webkit-scrollbar-thumb {
 @media (max-width: 1000px) {
   .quick-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .home-columns {
-    grid-template-columns: 1fr;
   }
 }
 
