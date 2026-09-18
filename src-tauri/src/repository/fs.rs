@@ -150,8 +150,7 @@ pub fn count(bucket: &Bucket) -> Result<u32, ApiError> {
     Ok(scan(bucket)?.len() as u32)
 }
 
-/// 读取 bucket 内文件内容；资产内容读取在后续阶段接入。
-#[allow(dead_code)]
+/// 读取 bucket 内文件内容。
 pub fn read(bucket: &Bucket, relative: &str) -> Result<Vec<u8>, ApiError> {
     let path = resolve(bucket, relative)?;
     fs::read(&path).map_err(|e| match e.kind() {

@@ -64,6 +64,10 @@ impl ApiError {
         Self::new("user_declined", message)
     }
 
+    pub fn unsupported_asset(message: impl Into<String>) -> Self {
+        Self::new("unsupported_asset", message)
+    }
+
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal", message)
     }

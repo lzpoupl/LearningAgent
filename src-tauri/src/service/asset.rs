@@ -160,7 +160,7 @@ impl AssetService {
 }
 
 /// 把 bucket 内文件映射为资产；`id` 为 `/<bucket>/<relative-path>`。
-fn asset_from_entry(bucket: &Bucket, entry: FileEntry) -> LearningAsset {
+pub(crate) fn asset_from_entry(bucket: &Bucket, entry: FileEntry) -> LearningAsset {
     let kind = kind_of(&entry.extension);
     LearningAsset {
         id: format!("/{}/{}", bucket.name, entry.relative_path),
@@ -176,7 +176,7 @@ fn asset_from_entry(bucket: &Bucket, entry: FileEntry) -> LearningAsset {
 }
 
 /// 解析 `/<bucket>/<relative-path>` 形式的资产 id。
-fn parse_asset_id(asset_id: &str) -> Result<(String, String), ApiError> {
+pub(crate) fn parse_asset_id(asset_id: &str) -> Result<(String, String), ApiError> {
     let trimmed = asset_id.strip_prefix('/').unwrap_or(asset_id);
     match trimmed.split_once('/') {
         Some((bucket, rest)) if !bucket.is_empty() && !rest.is_empty() => {

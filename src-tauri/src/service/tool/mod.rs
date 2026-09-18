@@ -1,9 +1,10 @@
 //! 工具引用与工具执行扩展点。
 //!
 //! 工具元数据由迁移播种并落在 `tool` 表，具体实现在 `service/tool` 下按工具组注册；
-//! 尚未实现的工具（`asset.*`）继续返回 `tool_unavailable`。
+//! 目录中存在但未注册实现的工具会返回 `tool_unavailable`。
 
 pub mod anki;
+pub mod asset;
 mod args;
 pub mod user;
 
@@ -127,7 +128,7 @@ impl ToolRegistry {
 
 /// 校验「已注册的工具 ⊆ 工具目录」，防止代码实现与迁移播种漂移。
 ///
-/// 只做单向校验：目录里允许存在尚未实现的工具（`asset.*`）。
+/// 只做单向校验：目录里允许存在尚未实现的工具。
 pub fn validate_registry(registry: &ToolRegistry, conn: &Connection) -> Result<(), ApiError> {
     for key in registry.keys() {
         if agent_repo::get_tool(conn, &key.group, &key.id)?.is_none() {
