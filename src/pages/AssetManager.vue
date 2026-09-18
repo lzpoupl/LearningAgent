@@ -6,34 +6,31 @@
         <h1>学习资料</h1>
         <p>PDF、PPT、笔记等非结构化学习资产</p>
       </div>
-      <el-upload ref="uploadRef" action="#" :auto-upload="false" :show-file-list="false" multiple
-        accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp" :on-change="handleFilesSelected">
-        <el-button type="primary">
-          <el-icon>
-            <Plus />
-          </el-icon>
-          添加资料
-        </el-button>
-      </el-upload>
+      <el-button type="primary" :loading="addingDirectory" @click="addDirectory">
+        <el-icon>
+          <FolderAdd />
+        </el-icon>
+        添加目录
+      </el-button>
     </header>
 
     <section class="materials-toolbar">
-      <el-popover v-model:visible="subjectMenuOpen" class="subject-picker-popover" placement="bottom-start" :width="270"
+      <el-popover v-model:visible="bucketMenuOpen" class="bucket-picker-popover" placement="bottom-start" :width="270"
         trigger="click">
         <template #reference>
-          <el-button class="subject-picker" plain>
-            <span class="subject-picker-label">{{ selectedSubject }}资料</span>
+          <el-button class="bucket-picker" plain>
+            <span class="bucket-picker-label">{{ selectedBucketLabel }}</span>
             <el-icon>
               <ArrowDown />
             </el-icon>
           </el-button>
         </template>
-        <el-tree class="subject-tree" :data="subjectTreeData" node-key="value" :props="subjectTreeProps"
-          highlight-current :current-node-key="selectedSubject" @node-click="handleSubjectNodeClick">
+        <el-tree class="bucket-tree" :data="bucketTreeData" node-key="value" :props="bucketTreeProps"
+          highlight-current :current-node-key="selectedBucket" @node-click="handleBucketNodeClick">
           <template #default="{ data }">
-            <span class="subject-tree-node" :title="data.folder ? `物理存储：${data.folder}` : '全部学科文件夹'">
-              <span class="subject-tree-label">{{ data.label }}</span>
-              <span class="subject-tree-count">{{ data.count }}</span>
+            <span class="bucket-tree-node" :title="data.folder ? `物理存储：${data.folder}` : '全部资料目录'">
+              <span class="bucket-tree-label">{{ data.label }}</span>
+              <span class="bucket-tree-count">{{ data.count }}</span>
             </span>
           </template>
         </el-tree>
@@ -58,8 +55,6 @@
       </div>
     </section>
 
-    <div v-if="uploadError" class="feedback error" role="alert">{{ uploadError }}</div>
-
     <section v-if="filteredMaterials.length" class="materials-grid" aria-label="资料列表">
       <el-card v-for="material in filteredMaterials" :key="material.id" class="material-card" shadow="hover"
         :body-style="{ padding: '0' }">
@@ -68,13 +63,13 @@
           <span class="file-type">{{ material.typeLabel }}</span>
         </div>
         <div class="material-body">
-          <div class="material-subject" :class="`format-accent-${material.kind}`" :title="`物理存储：${material.folder}`">
-            {{ material.subject }}
+          <div class="material-bucket" :class="`format-accent-${material.kind}`" :title="`物理存储：${material.folder}`">
+            {{ material.bucket }}
           </div>
           <h2 :title="material.name">{{ material.name }}</h2>
           <div class="material-meta">
             <span>{{ formatSize(material.size) }}</span>
-            <span>添加于 {{ material.addedAt }}</span>
+            <span>添加于 {{ formatAddedAt(material.addedAt) }}</span>
           </div>
           <div class="material-actions">
             <el-button class="material-open-button" :class="`format-accent-${material.kind}`" type="primary" text
@@ -97,54 +92,25 @@
     </section>
 
     <section v-else class="empty-materials">
-      <el-empty :description="materials.length ? (searchKeyword ? '没有匹配的资料' : '这个学科还没有资料') : '添加第一份学习资料'">
-        <p>{{ materials.length ? (searchKeyword ? '调整搜索关键词，再试一次。'
-          : '切换其他学科，或添加一份新的资料。') : '选择 PDF、PPT 或笔记文件，让学习资料集中在这里。' }}
-        </p>
-        <el-button type="primary" @click="openUploadPicker">选择文件</el-button>
+      <el-empty :description="emptyDescription">
+        <p>{{ emptyHint }}</p>
+        <el-button type="primary" :loading="addingDirectory" @click="addDirectory">选择目录</el-button>
       </el-empty>
     </section>
-
-    <el-dialog v-model="showSubjectDialog" title="添加学习资料" width="min(460px, 92vw)" destroy-on-close
-      @closed="resetPendingUpload">
-      <p class="selected-files">已选择 {{ pendingFiles.length }} 个文件，每个文件会生成一个独立资料模块。</p>
-      <el-form label-position="top" @submit.prevent="confirmUpload">
-        <el-form-item label="所属学科">
-          <el-select v-model="pendingSubject" class="dialog-control">
-            <el-option v-for="item in subjectFolders" :key="item.name" :label="item.name" :value="item.name" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="或新建学科">
-          <el-input v-model="newSubject" placeholder="例如：操作系统" />
-        </el-form-item>
-      </el-form>
-      <p class="target-folder">
-        归档到物理文件夹：<code>{{ pendingFolderPath || '—' }}</code>
-      </p>
-      <template #footer>
-        <el-button @click="cancelUpload">取消</el-button>
-        <el-button type="primary" :disabled="!pendingFiles.length || (!pendingSubject && !newSubject.trim())"
-          @click="confirmUpload">
-          添加资料
-        </el-button>
-      </template>
-    </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { UploadFile, UploadInstance } from 'element-plus'
-import { ElMessage } from 'element-plus'
-import { ArrowDown, Plus, Search } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown, FolderAdd, Search } from '@element-plus/icons-vue'
+import { convertFileSrc } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
+
+import type { Bucket, LearningAsset } from '../types/assets'
+import { createBucket, deleteAsset, getAssetUrl, listAssets, listBuckets } from '../services/assets'
 
 type MaterialKind = 'pdf' | 'slides' | 'note' | 'image' | 'word' | 'document'
-
-/** 学科 <-> 物理文件夹 的一一映射 */
-type SubjectFolder = {
-  name: string
-  folder: string
-}
 
 type Material = {
   id: string
@@ -152,66 +118,62 @@ type Material = {
   extension: string
   typeLabel: string
   kind: MaterialKind
-  subject: string
-  /** 该资料在总仓库中的物理存储文件夹 */
+  /** 资料所属的 bucket（即资料目录）名称。 */
+  bucket: string
+  /** 该资料目录在文件系统中的绝对路径。 */
   folder: string
   size: number
+  /** RFC3339 时间戳，展示时格式化，排序时直接比较。 */
   addedAt: string
-  url: string
+  /** mock 或已解析出的可访问地址；缺省时按需向服务端解析。 */
+  url?: string
 }
 
-type UploadMaterialRequest = {
-  file: File
-  subject: string
-  folder: string
-}
+/** 表示“全部资料目录”的哨兵值。 */
+const ALL_BUCKETS = 'ALL_BUCKETS'
 
-const uploadRef = ref<UploadInstance>()
+const buckets = ref<Bucket[]>([])
 const materials = ref<Material[]>([])
 
-/** 学科与物理文件夹的映射表：来自服务接口 */
-const subjectFolders = ref<SubjectFolder[]>([])
-
-const selectedSubject = ref('全部')
-const pendingFiles = ref<File[]>([])
-const pendingSubject = ref('')
-const newSubject = ref('')
-const showSubjectDialog = ref(false)
-const uploadError = ref('')
+const selectedBucket = ref(ALL_BUCKETS)
+const bucketMenuOpen = ref(false)
+const addingDirectory = ref(false)
 const sortBy = ref<'updated' | 'name' | 'size'>('updated')
 const searchKeyword = ref('')
-const subjectMenuOpen = ref(false)
 
-const subjects = computed(() => ['全部', ...subjectFolders.value.map(item => item.name)])
+const bucketNames = computed(() => [ALL_BUCKETS, ...buckets.value.map(item => item.name)])
 
-const subjectTreeData = computed(() => subjects.value.map(subject => ({
-  label: subject === '全部' ? '全部资料' : subject,
-  value: subject,
-  count: subjectCount(subject),
-  folder: subject === '全部'
-    ? ''
-    : subjectFolders.value.find(item => item.name === subject)?.folder ?? '',
+const selectedBucketLabel = computed(() =>
+  selectedBucket.value === ALL_BUCKETS ? '全部资料' : `${selectedBucket.value}资料`)
+
+const bucketTreeData = computed(() => bucketNames.value.map(name => ({
+  label: name === ALL_BUCKETS ? '全部资料' : name,
+  value: name,
+  count: bucketCount(name),
+  folder: name === ALL_BUCKETS ? '' : folderOf(name),
 })))
 
-const subjectTreeProps = { label: 'label', children: 'children' }
+const bucketTreeProps = { label: 'label', children: 'children' }
 
-/** 弹窗中展示的目标文件夹（新学科按同一规则推导，保证一一对应） */
-const pendingFolderPath = computed(() => {
-  const name = newSubject.value.trim()
-  if (name) {
-    const existing = subjectFolders.value.find(item => item.name === name)
-    return existing ? existing.folder : `materials/${sanitizeFolderName(name)}`
-  }
-  return subjectFolders.value.find(item => item.name === pendingSubject.value)?.folder ?? ''
+const emptyDescription = computed(() => {
+  if (!materials.value.length) return '还没有资料目录'
+  if (searchKeyword.value.trim()) return '没有匹配的资料'
+  return '这个资料目录还没有内容'
+})
+
+const emptyHint = computed(() => {
+  if (!materials.value.length) return '选择一个本地目录，目录内的文件会作为学习资料展示。'
+  if (searchKeyword.value.trim()) return '调整搜索关键词，再试一次。'
+  return '切换其他资料目录查看。'
 })
 
 const filteredMaterials = computed(() => {
-  const subjectFiltered = selectedSubject.value === '全部'
+  const bucketFiltered = selectedBucket.value === ALL_BUCKETS
     ? materials.value
-    : materials.value.filter(material => material.subject === selectedSubject.value)
+    : materials.value.filter(material => material.bucket === selectedBucket.value)
   const normalizedKeyword = searchKeyword.value.trim().toLocaleLowerCase()
-  const filtered = subjectFiltered.filter(material => {
-    const searchableText = [material.name, material.extension, material.typeLabel, material.subject]
+  const filtered = bucketFiltered.filter(material => {
+    const searchableText = [material.name, material.extension, material.typeLabel, material.bucket]
       .join(' ')
       .toLocaleLowerCase()
     return !normalizedKeyword || searchableText.includes(normalizedKeyword)
@@ -224,184 +186,163 @@ const filteredMaterials = computed(() => {
     if (sortBy.value === 'size') {
       return right.size - left.size
     }
-    return right.id.localeCompare(left.id)
+    return right.addedAt.localeCompare(left.addedAt)
   })
 })
 
-function subjectCount(subject: string) {
-  return subject === '全部'
+function bucketCount(name: string) {
+  return name === ALL_BUCKETS
     ? materials.value.length
-    : materials.value.filter(material => material.subject === subject).length
+    : materials.value.filter(material => material.bucket === name).length
 }
 
-/** 保证一个学科只会生成一个文件夹，且文件夹名唯一 */
-function ensureSubjectFolder(subject: string) {
-  const existing = subjectFolders.value.find(item => item.name === subject)
-  if (existing) {
-    return existing.folder
+function folderOf(name: string) {
+  return buckets.value.find(item => item.name === name)?.rootPath ?? ''
+}
+
+/** 添加目录：选择本地目录后登记为 bucket，目录内文件即成为资料。 */
+async function addDirectory() {
+  addingDirectory.value = true
+  try {
+    const selected = await open({ directory: true, multiple: false, title: '选择资料目录' })
+    if (typeof selected !== 'string' || !selected) {
+      return
+    }
+
+    const name = await resolveBucketName(defaultNameOf(selected))
+    if (!name) {
+      return
+    }
+
+    await createBucket(name, selected)
+    await refresh()
+    selectedBucket.value = name
+    bucketMenuOpen.value = false
+    ElMessage.success(`已添加资料目录“${name}”`)
+  } catch (error) {
+    console.error('添加资料目录失败：', error)
+    ElMessage.error(errorMessage(error, '添加资料目录失败，请稍后重试。'))
+  } finally {
+    addingDirectory.value = false
   }
+}
 
-  const base = `materials/${sanitizeFolderName(subject)}`
-  let folder = base
-  let suffix = 2
-  while (subjectFolders.value.some(item => item.folder === folder)) {
-    folder = `${base}-${suffix}`
-    suffix += 1
+/** 默认用目录名作为资料目录名称，重名时再让用户改一个。 */
+async function resolveBucketName(baseName: string): Promise<string | null> {
+  if (!buckets.value.some(item => item.name === baseName)) {
+    return baseName
   }
-
-  subjectFolders.value.push({ name: subject, folder })
-  return folder
+  return askBucketName(`已存在名为“${baseName}”的资料目录，请换一个名称`, baseName)
 }
 
-/** 把学科名转换成安全的文件夹名 */
-function sanitizeFolderName(name: string) {
-  const cleaned = name
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-  return cleaned || 'untitled'
+async function askBucketName(message: string, defaultName: string): Promise<string | null> {
+  try {
+    const { value } = await ElMessageBox.prompt(message, '添加资料目录', {
+      confirmButtonText: '添加',
+      cancelButtonText: '取消',
+      inputValue: defaultName,
+      inputPlaceholder: '例如：操作系统',
+      inputValidator: (input: string) => (input && input.trim() ? true : '名称不能为空'),
+    })
+    return value.trim()
+  } catch {
+    return null
+  }
 }
 
-// TODO:
-// 后面替换成真实后端 API：GET /api/subject-folders
-async function fetchSubjectFolders(): Promise<SubjectFolder[]> {
-  console.log('获取学科与物理文件夹映射')
-
-  return [
-    { name: '数学', folder: 'materials/math' },
-    { name: '英语', folder: 'materials/english' },
-    { name: '操作系统', folder: 'materials/os' },
-  ]
+function defaultNameOf(path: string) {
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? '资料'
 }
 
-// TODO:
-// 后面替换成真实后端 API：GET /api/materials
-async function fetchMaterials(): Promise<Material[]> {
-  console.log('获取资料列表')
-
-  return []
+async function refresh() {
+  buckets.value = await listBuckets()
+  materials.value = (await listAssets()).map(toMaterial)
 }
 
-// TODO:
-// 后面替换成真实后端 API：POST /api/materials
-async function uploadMaterial(request: UploadMaterialRequest): Promise<Material> {
-  const { file, subject, folder } = request
-
-  console.log('发送给后端：', request)
-
+/** 把服务端资产映射为页面资料；所属目录与物理路径由资产 id 的首段还原。 */
+function toMaterial(asset: LearningAsset): Material {
+  const { bucket } = parseAssetId(asset.id)
   return {
-    id: `${Date.now()}-${file.name}-${Math.random()}`,
-    name: file.name,
-    extension: getExtension(file.name),
-    typeLabel: getTypeLabel(file.name),
-    kind: getMaterialKind(file.name),
-    subject,
-    folder,
-    size: file.size,
-    addedAt: '刚刚',
-    url: URL.createObjectURL(file),
+    id: asset.id,
+    name: asset.name,
+    extension: asset.extension ? asset.extension.toUpperCase() : 'FILE',
+    typeLabel: asset.typeLabel,
+    kind: getMaterialKind(asset.name),
+    bucket: bucket || '未分组',
+    folder: folderOf(bucket),
+    size: asset.size,
+    addedAt: asset.addedAt,
+    url: asset.url,
   }
 }
 
-// TODO:
-// 后面替换成真实后端 API：DELETE /api/materials/:id
-async function deleteMaterial(id: string): Promise<void> {
-  console.log('删除资料：', id)
+/** 资产 id 形如 `/<bucket>/<relative-path>`。 */
+function parseAssetId(id: string) {
+  const trimmed = id.replace(/^\/+/, '')
+  const separator = trimmed.indexOf('/')
+  return separator === -1
+    ? { bucket: trimmed, relativePath: '' }
+    : { bucket: trimmed.slice(0, separator), relativePath: trimmed.slice(separator + 1) }
 }
 
-function handleSubjectNodeClick(data: { value: string }) {
-  selectedSubject.value = data.value
-  subjectMenuOpen.value = false
-}
-
-function openUploadPicker() {
-  const uploadElement = uploadRef.value?.$el as HTMLElement | undefined
-  uploadElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()
-}
-
-function handleFilesSelected(file: UploadFile) {
-  const rawFile = file.raw
-
-  if (!rawFile) {
-    return
+function errorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message) return message
   }
+  if (typeof error === 'string' && error) return error
+  if (error instanceof Error && error.message) return error.message
+  return fallback
+}
 
-  if (!isSupportedFile(rawFile)) {
-    uploadError.value = `暂不支持“${rawFile.name}”，请选择 PDF、PPT 或笔记文件。`
-    ElMessage.error(uploadError.value)
-    uploadRef.value?.clearFiles()
-    return
+function handleBucketNodeClick(data: { value: string }) {
+  selectedBucket.value = data.value
+  bucketMenuOpen.value = false
+}
+
+async function openMaterial(material: Material) {
+  try {
+    const path = await getAssetUrl(material.id)
+    const url = toAccessibleUrl(path || material.url || '')
+    if (!url) {
+      ElMessage.error('该资料暂时无法打开。')
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (error) {
+    console.error('打开资料失败：', error)
+    ElMessage.error('打开资料失败，请稍后重试。')
   }
-
-  uploadError.value = ''
-  if (!pendingFiles.value.some(item => item.name === rawFile.name && item.size === rawFile.size)) {
-    pendingFiles.value.push(rawFile)
-  }
-  showSubjectDialog.value = true
-}
-
-function isSupportedFile(file: File) {
-  return /\.(pdf|ppt|pptx|doc|docx|txt|md|markdown|png|jpg|jpeg|webp)$/i.test(file.name)
-}
-
-async function confirmUpload() {
-  const subject = newSubject.value.trim() || pendingSubject.value
-  if (!subject || !pendingFiles.value.length) {
-    return
-  }
-
-  // 学科 -> 物理文件夹，一一对应
-  const folder = ensureSubjectFolder(subject)
-
-  const uploadedMaterials = await Promise.all(
-    pendingFiles.value.map(file => uploadMaterial({ file, subject, folder }))
-  )
-  materials.value.push(...uploadedMaterials)
-
-  selectedSubject.value = subject
-  subjectMenuOpen.value = false
-  cancelUpload()
-}
-
-function cancelUpload() {
-  uploadRef.value?.clearFiles()
-  resetPendingUpload()
-  showSubjectDialog.value = false
-}
-
-function resetPendingUpload() {
-  pendingFiles.value = []
-  newSubject.value = ''
-}
-
-function openMaterial(material: Material) {
-  window.open(material.url, '_blank', 'noopener,noreferrer')
 }
 
 async function removeMaterial(id: string) {
-  const material = materials.value.find(item => item.id === id)
-  if (!material) {
-    return
+  try {
+    await deleteAsset(id)
+    materials.value = materials.value.filter(item => item.id !== id)
+  } catch (error) {
+    console.error('删除资料失败：', error)
+    ElMessage.error('删除资料失败，请稍后重试。')
   }
-  await deleteMaterial(id)
-  URL.revokeObjectURL(material.url)
-  materials.value = materials.value.filter(item => item.id !== id)
+}
+
+/** 后端返回绝对路径，用 convertFileSrc 转成 WebView 可访问地址；mock 已给出 data URL 时直接使用。 */
+function toAccessibleUrl(raw: string) {
+  if (!raw) {
+    return ''
+  }
+  if (/^(data:|blob:|https?:|file:)/i.test(raw)) {
+    return raw
+  }
+  try {
+    return convertFileSrc(raw)
+  } catch {
+    return raw
+  }
 }
 
 function getExtension(name: string) {
   return name.split('.').pop()?.toUpperCase() || 'FILE'
-}
-
-function getTypeLabel(name: string) {
-  const extension = getExtension(name)
-  if (extension === 'PDF') return 'PDF 文档'
-  if (extension === 'PPT' || extension === 'PPTX') return '演示文稿'
-  if (extension === 'DOC' || extension === 'DOCX') return 'Word 文档'
-  if (extension === 'MD' || extension === 'MARKDOWN' || extension === 'TXT') return '笔记'
-  if (['PNG', 'JPG', 'JPEG', 'WEBP'].includes(extension)) return '图片'
-  return '文档'
 }
 
 function getMaterialKind(name: string): MaterialKind {
@@ -421,16 +362,21 @@ function formatSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-onMounted(async () => {
-  subjectFolders.value = await fetchSubjectFolders()
-  materials.value = await fetchMaterials()
-  if (subjectFolders.value.length) {
-    pendingSubject.value = subjectFolders.value[0].name
+function formatAddedAt(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
   }
-})
+  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
 
-onBeforeUnmount(() => {
-  materials.value.forEach(material => URL.revokeObjectURL(material.url))
+onMounted(async () => {
+  try {
+    await refresh()
+  } catch (error) {
+    console.error('加载学习资料失败：', error)
+    ElMessage.error('加载学习资料失败，请稍后重试。')
+  }
 })
 </script>
 
@@ -448,8 +394,7 @@ onBeforeUnmount(() => {
 .materials-header,
 .materials-toolbar,
 .materials-grid,
-.empty-materials,
-.feedback {
+.empty-materials {
   width: min(1220px, 100%);
   margin: 0 auto;
 }
@@ -510,7 +455,7 @@ button {
   border-bottom: 1px solid #e5e1da;
 }
 
-.subject-picker {
+.bucket-picker {
   flex: 0 0 220px;
   width: 220px;
   justify-content: space-between;
@@ -519,36 +464,36 @@ button {
   text-align: left;
 }
 
-.subject-picker:hover,
-.subject-picker:focus {
+.bucket-picker:hover,
+.bucket-picker:focus {
   border-color: #b7d0f8;
   background: #eef5ff;
   color: var(--learning-primary);
 }
 
-.subject-picker-label {
+.bucket-picker-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subject-tree {
+.bucket-tree {
   margin: -6px;
   color: var(--learning-text);
 }
 
-.subject-tree :deep(.el-tree-node__content) {
+.bucket-tree :deep(.el-tree-node__content) {
   height: 38px;
   border-radius: 6px;
 }
 
-.subject-tree :deep(.el-tree-node__content:hover),
-.subject-tree :deep(.is-current > .el-tree-node__content) {
+.bucket-tree :deep(.el-tree-node__content:hover),
+.bucket-tree :deep(.is-current > .el-tree-node__content) {
   background: #eaf2ff;
   color: var(--learning-primary);
 }
 
-.subject-tree-node {
+.bucket-tree-node {
   width: 100%;
   display: flex;
   align-items: center;
@@ -558,19 +503,19 @@ button {
   font-size: 13px;
 }
 
-.subject-tree-label {
+.bucket-tree-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subject-tree-count {
+.bucket-tree-count {
   flex-shrink: 0;
   color: var(--learning-text-muted);
   font-size: 11px;
 }
 
-/* 搜索框：紧跟学科选择器，位于排序左侧 */
+/* 搜索框：紧跟资料目录选择器，位于排序左侧 */
 .material-search {
   flex: 0 0 260px;
   width: 260px;
@@ -658,7 +603,7 @@ button {
   padding: 15px 16px 14px;
 }
 
-.material-subject {
+.material-bucket {
   color: #a08c75;
   font-size: 10px;
   font-weight: 700;
@@ -703,41 +648,6 @@ button {
   text-align: center;
 }
 
-.feedback {
-  margin-bottom: 16px;
-  padding: 9px 11px;
-  border-radius: 6px;
-  background: #fff1ee;
-  color: #a34e3f;
-  font-size: 12px;
-}
-
-.selected-files {
-  margin-top: 20px;
-  color: #8f867d;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.dialog-control {
-  width: 100%;
-}
-
-.target-folder {
-  margin-top: 4px;
-  color: var(--learning-text-muted);
-  font-size: 12px;
-}
-
-.target-folder code {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #eaf2ff;
-  color: var(--learning-primary);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 11px;
-}
-
 @media (max-width: 1024px) {
   .sort-control {
     margin-left: 0;
@@ -765,7 +675,7 @@ button {
     flex-direction: column;
   }
 
-  .subject-picker,
+  .bucket-picker,
   .material-search {
     flex: 1 1 auto;
     width: 100%;
@@ -799,8 +709,7 @@ button {
 .materials-page .materials-header p,
 .materials-page .sort-control,
 .materials-page .material-meta,
-.materials-page .empty-materials p,
-.materials-page .selected-files {
+.materials-page .empty-materials p {
   color: var(--learning-text-secondary);
 }
 
@@ -808,22 +717,17 @@ button {
   border-bottom-color: var(--learning-border);
 }
 
-.materials-page .subject-picker:hover,
-.materials-page .subject-picker:focus {
+.materials-page .bucket-picker:hover,
+.materials-page .bucket-picker:focus {
   border-color: var(--el-color-primary-light-5);
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
 }
 
-.materials-page .subject-tree :deep(.el-tree-node__content:hover),
-.materials-page .subject-tree :deep(.is-current > .el-tree-node__content) {
+.materials-page .bucket-tree :deep(.el-tree-node__content:hover),
+.materials-page .bucket-tree :deep(.is-current > .el-tree-node__content) {
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
-}
-
-.materials-page .target-folder code {
-  background: var(--el-color-primary-light-9);
-  color: var(--learning-primary);
 }
 
 .materials-page .material-card {
@@ -871,7 +775,7 @@ button {
   color: var(--el-color-info);
 }
 
-.materials-page .material-subject {
+.materials-page .material-bucket {
   color: var(--learning-primary);
 }
 
@@ -918,32 +822,32 @@ button {
   outline-offset: 2px;
 }
 
-.materials-page .material-subject.format-accent-pdf,
+.materials-page .material-bucket.format-accent-pdf,
 .materials-page .material-open-button.format-accent-pdf {
   color: var(--el-color-danger);
 }
 
-.materials-page .material-subject.format-accent-slides,
+.materials-page .material-bucket.format-accent-slides,
 .materials-page .material-open-button.format-accent-slides {
   color: var(--el-color-warning);
 }
 
-.materials-page .material-subject.format-accent-word,
+.materials-page .material-bucket.format-accent-word,
 .materials-page .material-open-button.format-accent-word {
   color: var(--el-color-primary);
 }
 
-.materials-page .material-subject.format-accent-note,
+.materials-page .material-bucket.format-accent-note,
 .materials-page .material-open-button.format-accent-note {
   color: var(--el-color-success);
 }
 
-.materials-page .material-subject.format-accent-image,
+.materials-page .material-bucket.format-accent-image,
 .materials-page .material-open-button.format-accent-image {
   color: var(--el-color-info);
 }
 
-.materials-page .material-subject.format-accent-document,
+.materials-page .material-bucket.format-accent-document,
 .materials-page .material-open-button.format-accent-document {
   color: var(--el-color-info);
 }
@@ -967,10 +871,5 @@ button {
 .materials-page .material-open-button.format-accent-image:hover,
 .materials-page .material-open-button.format-accent-document:hover {
   background: var(--el-color-info-light-9);
-}
-
-.materials-page .feedback {
-  background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger);
 }
 </style>

@@ -18,6 +18,21 @@ const TURN_COMMANDS = [
   'agent_skip_question',
 ]
 
+/** 浏览器 Mock 下模拟系统目录选择器，返回假路径，方便走通「添加目录」流程。 */
+const MOCK_DIRECTORIES = [
+  'D:\\学习资料\\操作系统',
+  'D:\\学习资料\\数学',
+  'D:\\学习资料\\英语',
+]
+let mockDirectoryIndex = 0
+
+function mockDialogOpen(payload: Record<string, unknown>): string | string[] {
+  const options = (payload.options ?? {}) as { multiple?: boolean }
+  const path = MOCK_DIRECTORIES[mockDirectoryIndex % MOCK_DIRECTORIES.length]
+  mockDirectoryIndex += 1
+  return options.multiple ? [path] : path
+}
+
 /** 启用前端 Mock：按领域拦截 Tauri invoke，用内存假数据响应服务请求。 */
 export function setupMocks(): void {
   const anki = new AnkiMock()
@@ -50,6 +65,7 @@ export function setupMocks(): void {
     if (cmd.startsWith('study_')) return study.handle(cmd, args)
     if (cmd.startsWith('stats_')) return statistics.handle(cmd, args)
     if (cmd.startsWith('user_')) return user.handle(cmd)
+    if (cmd === 'plugin:dialog|open') return mockDialogOpen(args)
 
     console.warn(`[mock] 未处理的命令: ${cmd}`)
     return undefined

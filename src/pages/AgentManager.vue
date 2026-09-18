@@ -122,8 +122,7 @@ import type {
   AgentInfo,
   AgentToolPermission,
   AgentToolPermissionInput,
-  AgentType,
-  ToolPermission,
+  AgentType
 } from '../types/chat'
 
 interface AgentForm {
